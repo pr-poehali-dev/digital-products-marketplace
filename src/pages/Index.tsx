@@ -28,7 +28,7 @@ const PRODUCTS: Product[] = [
 
 const CATEGORIES = ["Все", "Документы", "Презентации", "Таблицы", "Дизайн"];
 
-type Page = "home" | "catalog" | "upload" | "search" | "profile";
+type Page = "home" | "catalog" | "upload" | "profile";
 
 const CATEGORY_COLORS: Record<string, string> = {
   "Документы": "rgba(0,245,212,0.15)",
@@ -47,6 +47,7 @@ export default function Index() {
   const [page, setPage] = useState<Page>("home");
   const [favorites, setFavorites] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("Все");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -56,17 +57,9 @@ export default function Index() {
 
   const filteredProducts = PRODUCTS.filter(p => {
     const matchCat = selectedCategory === "Все" || p.category === selectedCategory;
-    const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchSearch;
   });
-
-  const searchFiltered = PRODUCTS.filter(p =>
-    p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.author.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   const favoriteProducts = PRODUCTS.filter(p => favorites.includes(p.id));
 
@@ -89,9 +82,9 @@ export default function Index() {
         </button>
 
         <div className="hidden md:flex items-center gap-1">
-          {(["home", "catalog", "upload", "search", "profile"] as Page[]).map((p) => {
-            const labels: Record<Page, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка", search: "Поиск", profile: "Профиль" };
-            const icons: Record<Page, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload", search: "Search", profile: "User" };
+          {(["home", "catalog", "upload"] as Page[]).map((p) => {
+            const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка" };
+            const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload" };
             return (
               <button key={p} onClick={() => navigate(p)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -107,32 +100,90 @@ export default function Index() {
           })}
         </div>
 
-        <button onClick={() => navigate("profile")} className="relative">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.2), rgba(155,89,245,0.2))", border: "1px solid rgba(0,245,212,0.3)" }}>
-            <Icon name="User" size={16} style={{ color: "#00f5d4" }} />
+        <div className="flex items-center gap-3">
+          {/* Search bar desktop */}
+          <div className="hidden md:flex items-center relative">
+            {searchOpen ? (
+              <div className="flex items-center relative animate-fade-in">
+                <Icon name="Search" size={15} className="absolute left-3" style={{ color: "#00f5d4" }} />
+                <input
+                  autoFocus
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onBlur={() => { if (!searchQuery) setSearchOpen(false); }}
+                  placeholder="Поиск по названию..."
+                  className="pl-9 pr-10 py-2 rounded-lg text-sm outline-none w-56 transition-all"
+                  style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.3)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }}
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
+                    className="absolute right-3" style={{ color: "rgba(180,200,220,0.5)" }}>
+                    <Icon name="X" size={14} />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button onClick={() => setSearchOpen(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
+                style={{ color: "rgba(180,200,220,0.7)", border: "1px solid transparent" }}>
+                <Icon name="Search" size={15} />
+                Поиск
+              </button>
+            )}
           </div>
-          {favorites.length > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold"
-              style={{ background: "#f500c8", color: "white", fontSize: "9px" }}>{favorites.length}</span>
-          )}
-        </button>
+
+          {/* Profile icon */}
+          <button onClick={() => navigate("profile")} className="relative">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.2), rgba(155,89,245,0.2))", border: "1px solid rgba(0,245,212,0.3)" }}>
+              <Icon name="User" size={16} style={{ color: "#00f5d4" }} />
+            </div>
+            {favorites.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-xs flex items-center justify-center font-bold"
+                style={{ background: "#f500c8", color: "white", fontSize: "9px" }}>{favorites.length}</span>
+            )}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 py-3"
-        style={{ background: "rgba(7,11,18,0.95)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(0,245,212,0.1)" }}>
-        {(["home", "catalog", "upload", "search", "profile"] as Page[]).map((p) => {
-          const icons: Record<Page, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload", search: "Search", profile: "User" };
-          const labels: Record<Page, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузить", search: "Поиск", profile: "Профиль" };
-          return (
-            <button key={p} onClick={() => navigate(p)} className="flex flex-col items-center gap-1 p-2 transition-all"
-              style={{ color: page === p ? "#00f5d4" : "rgba(180,200,220,0.35)" }}>
-              <Icon name={icons[p]} size={20} />
-              <span style={{ fontSize: "9px", fontFamily: "'Orbitron', sans-serif", letterSpacing: "0.05em" }}>{labels[p]}</span>
-            </button>
-          );
-        })}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex flex-col"
+        style={{ background: "rgba(7,11,18,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(0,245,212,0.1)" }}>
+        {/* Mobile search bar */}
+        <div className="px-4 pt-3 pb-1">
+          <div className="relative">
+            <Icon name="Search" size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#00f5d4" }} />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Поиск по названию..."
+              className="w-full pl-9 pr-8 py-2 rounded-lg text-sm outline-none"
+              style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Icon name="X" size={13} style={{ color: "rgba(180,200,220,0.5)" }} />
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-around px-2 py-2">
+          {(["home", "catalog", "upload", "profile"] as Page[]).map((p) => {
+            const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload", profile: "User" };
+            const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузить", profile: "Профиль" };
+            return (
+              <button key={p} onClick={() => navigate(p)} className="flex flex-col items-center gap-1 p-2 transition-all relative"
+                style={{ color: page === p ? "#00f5d4" : "rgba(180,200,220,0.35)" }}>
+                <Icon name={icons[p]} size={20} />
+                {p === "profile" && favorites.length > 0 && (
+                  <span className="absolute -top-0.5 right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                    style={{ background: "#f500c8", fontSize: "7px", color: "white", fontWeight: "bold" }}>{favorites.length}</span>
+                )}
+                <span style={{ fontSize: "9px", fontFamily: "'Orbitron', sans-serif", letterSpacing: "0.05em" }}>{labels[p]}</span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
       <main className="pt-20 pb-24 md:pb-8">
@@ -227,10 +278,22 @@ export default function Index() {
         {/* ── CATALOG ── */}
         {page === "catalog" && (
           <div className="px-6 py-8 max-w-7xl mx-auto animate-fade-in">
-            <div className="mb-8">
+            <div className="mb-6">
               <h1 className="font-orbitron font-bold text-2xl mb-1" style={{ color: "#e8f4ff" }}>КАТАЛОГ <span className="neon-text">_</span></h1>
               <p style={{ color: "rgba(180,200,220,0.45)" }}>{filteredProducts.length} товаров</p>
             </div>
+
+            {searchQuery && (
+              <div className="mb-5 px-4 py-2 rounded-lg flex items-center justify-between"
+                style={{ background: "rgba(0,245,212,0.07)", border: "1px solid rgba(0,245,212,0.15)" }}>
+                <span className="text-sm" style={{ color: "#00f5d4" }}>
+                  Поиск: «{searchQuery}» — {filteredProducts.length} результатов
+                </span>
+                <button onClick={() => setSearchQuery("")} style={{ color: "rgba(180,200,220,0.5)" }}>
+                  <Icon name="X" size={14} />
+                </button>
+              </div>
+            )}
 
             <div className="flex gap-2 flex-wrap mb-8">
               {CATEGORIES.map(cat => (
@@ -262,59 +325,7 @@ export default function Index() {
           </div>
         )}
 
-        {/* ── SEARCH ── */}
-        {page === "search" && (
-          <div className="px-6 py-8 max-w-4xl mx-auto animate-fade-in">
-            <h1 className="font-orbitron font-bold text-2xl mb-6" style={{ color: "#e8f4ff" }}>ПОИСК <span className="neon-text">_</span></h1>
-
-            <div className="relative mb-8">
-              <Icon name="Search" size={18} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: "#00f5d4" }} />
-              <input autoFocus value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Название, категория или автор..."
-                className="w-full pl-12 pr-4 py-4 rounded-xl text-base outline-none transition-all"
-                style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.25)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-            </div>
-
-            {searchQuery === "" ? (
-              <div>
-                <p className="text-xs mb-3 font-orbitron tracking-widest" style={{ color: "rgba(180,200,220,0.35)" }}>ПОПУЛЯРНЫЕ ЗАПРОСЫ</p>
-                <div className="flex flex-wrap gap-2 mb-10">
-                  {["Презентация", "Бизнес-план", "Финансовая модель", "Контент-план", "UI Kit", "Шаблон"].map(tag => (
-                    <button key={tag} onClick={() => setSearchQuery(tag)}
-                      className="px-3 py-1.5 rounded-lg text-sm transition-all"
-                      style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.15)", color: "#00f5d4" }}>
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs mb-4 font-orbitron tracking-widest" style={{ color: "rgba(180,200,220,0.35)" }}>ВСЕ ТОВАРЫ</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {PRODUCTS.map((p, i) => (
-                    <ProductCard key={p.id} product={p} isFavorite={favorites.includes(p.id)}
-                      onFavorite={toggleFavorite} onOpen={setSelectedProduct} delay={i * 0.07} />
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm mb-5" style={{ color: "rgba(180,200,220,0.45)" }}>Найдено: {searchFiltered.length}</p>
-                {searchFiltered.length === 0 ? (
-                  <div className="text-center py-20">
-                    <Icon name="SearchX" size={40} style={{ color: "rgba(0,245,212,0.25)", margin: "0 auto 12px" }} />
-                    <p style={{ color: "rgba(180,200,220,0.35)" }}>По запросу «{searchQuery}» ничего нет</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {searchFiltered.map((p, i) => (
-                      <ProductCard key={p.id} product={p} isFavorite={favorites.includes(p.id)}
-                        onFavorite={toggleFavorite} onOpen={setSelectedProduct} delay={i * 0.07} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── SEARCH RESULTS overlay on catalog/home when query active ── */}
 
         {/* ── UPLOAD ── */}
         {page === "upload" && (
@@ -341,7 +352,7 @@ export default function Index() {
                   style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
               </div>
 
-              <UploadField label="ЦЕНА (₽)" placeholder="990" type="number" />
+              <PriceField />
 
               <div>
                 <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ФАЙЛ</label>
@@ -510,6 +521,42 @@ function UploadField({ label, placeholder, type = "text" }: { label: string; pla
       <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>{label}</label>
       <input type={type} placeholder={placeholder} className="w-full px-4 py-3 rounded-xl outline-none"
         style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
+    </div>
+  );
+}
+
+function PriceField() {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    if (v === "" || /^\d+$/.test(v)) {
+      setValue(v);
+      setError("");
+    } else {
+      setError("Цена не может быть отрицательной");
+    }
+  };
+
+  return (
+    <div>
+      <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ЦЕНА (₽)</label>
+      <input
+        type="number"
+        min="0"
+        value={value}
+        onChange={handleChange}
+        placeholder="990"
+        className="w-full px-4 py-3 rounded-xl outline-none"
+        style={{
+          background: "rgba(13,20,32,0.9)",
+          border: `1px solid ${error ? "rgba(245,80,80,0.5)" : "rgba(0,245,212,0.2)"}`,
+          color: "#e8f4ff",
+          fontFamily: "'Golos Text', sans-serif"
+        }}
+      />
+      {error && <p className="text-xs mt-1" style={{ color: "#f55050" }}>{error}</p>}
     </div>
   );
 }
