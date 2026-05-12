@@ -165,89 +165,110 @@ export default function Index() {
     <div className="min-h-screen grid-bg" style={{ fontFamily: "'Golos Text', sans-serif" }}>
 
       {/* ── NAVBAR ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-3"
-        style={{ background: "rgba(7,11,18,0.88)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
-        <div className="flex items-center gap-3">
+      <nav className="fixed top-0 left-0 right-0 z-50"
+        style={{ background: "rgba(7,11,18,0.92)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
+        {/* thin accent line top */}
+        <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, transparent, #00f5d4 30%, #9b59f5 70%, transparent)" }} />
+        <div className="flex items-center gap-3 px-5 py-2.5">
 
           {/* Logo */}
-          <button onClick={() => navigate("home")} className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg, #00f5d4, #9b59f5)" }}>
+          <button onClick={() => navigate("home")} className="flex items-center gap-2 flex-shrink-0 group">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-all group-hover:scale-105"
+              style={{ background: "linear-gradient(135deg, #00f5d4, #9b59f5)", boxShadow: "0 0 14px rgba(0,245,212,0.3)" }}>
               <span className="font-orbitron font-black text-xs" style={{ color: "#070b12" }}>NX</span>
             </div>
-            <span className="font-orbitron font-bold text-base tracking-wider neon-text hidden sm:block">NEXUS</span>
+            <span className="font-orbitron font-bold text-sm tracking-widest neon-text hidden lg:block">NEXUS</span>
           </button>
+
+          {/* separator */}
+          <div className="hidden md:block h-5 w-px mx-1" style={{ background: "rgba(0,245,212,0.15)" }} />
 
           {/* Nav links */}
           <div className="hidden md:flex items-center gap-0.5 flex-shrink-0">
             {(["home", "catalog", "upload"] as Page[]).map((p) => {
               const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка" };
               const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload" };
+              const active = page === p;
               return (
                 <button key={p} onClick={() => navigate(p)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative"
                   style={{
-                    color: page === p ? "#00f5d4" : "rgba(180,200,220,0.65)",
-                    background: page === p ? "rgba(0,245,212,0.08)" : "transparent",
-                    border: page === p ? "1px solid rgba(0,245,212,0.18)" : "1px solid transparent",
+                    color: active ? "#00f5d4" : "rgba(180,200,220,0.55)",
+                    background: active ? "rgba(0,245,212,0.07)" : "transparent",
                   }}>
-                  <Icon name={icons[p]} size={14} />
+                  {active && (
+                    <span className="absolute bottom-0 left-3 right-3 h-px rounded-full"
+                      style={{ background: "#00f5d4", boxShadow: "0 0 6px #00f5d4" }} />
+                  )}
+                  <Icon name={icons[p]} size={13} />
                   {labels[p]}
                 </button>
               );
             })}
           </div>
 
-          {/* Search — center, always visible */}
-          <div className="flex-1 flex justify-center px-2">
-            <div className="relative w-full max-w-sm">
-              <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#00f5d4" }} />
+          {/* ── SEARCH — true center ── */}
+          <div className="flex-1 flex justify-center">
+            <div className="relative w-full" style={{ maxWidth: "380px" }}>
+              <Icon name="Search" size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(0,245,212,0.6)" }} />
               <input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по названию..."
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm outline-none transition-all"
+                placeholder="Поиск по названию файла..."
+                className="w-full pl-10 pr-9 py-2 rounded-xl text-sm outline-none transition-all"
                 style={{
-                  background: "rgba(13,20,32,0.95)",
-                  border: searchQuery ? "1px solid rgba(0,245,212,0.45)" : "1px solid rgba(0,245,212,0.18)",
+                  background: searchQuery ? "rgba(13,20,32,1)" : "rgba(13,20,32,0.7)",
+                  border: searchQuery ? "1px solid rgba(0,245,212,0.5)" : "1px solid rgba(0,245,212,0.14)",
                   color: "#e8f4ff",
                   fontFamily: "'Golos Text', sans-serif",
-                  boxShadow: searchQuery ? "0 0 20px rgba(0,245,212,0.12), inset 0 0 10px rgba(0,245,212,0.03)" : "none",
+                  boxShadow: searchQuery ? "0 0 18px rgba(0,245,212,0.1)" : "none",
                 }}
               />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              {searchQuery ? (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-80">
                   <Icon name="X" size={13} style={{ color: "rgba(180,200,220,0.5)" }} />
                 </button>
+              ) : (
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-orbitron"
+                  style={{ color: "rgba(0,245,212,0.2)" }}>⌘K</span>
               )}
             </div>
           </div>
 
+          {/* separator */}
+          <div className="hidden md:block h-5 w-px mx-1" style={{ background: "rgba(0,245,212,0.15)" }} />
+
           {/* Auth + Profile */}
           <div className="flex items-center gap-2 flex-shrink-0">
             {user ? (
-              <button onClick={() => navigate("profile")} className="relative">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-                  style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.25), rgba(155,89,245,0.25))", border: "1px solid rgba(0,245,212,0.35)" }}>
-                  <span className="font-orbitron font-bold text-xs neon-text">{user.name.slice(0, 2).toUpperCase()}</span>
+              <button onClick={() => navigate("profile")} className="relative group flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all"
+                style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.18)" }}>
+                <div className="w-6 h-6 rounded-lg flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.3), rgba(155,89,245,0.3))" }}>
+                  <span className="font-orbitron font-black" style={{ fontSize: "9px", color: "#00f5d4" }}>{user.name.slice(0, 2).toUpperCase()}</span>
                 </div>
+                <span className="text-sm font-medium hidden sm:block" style={{ color: "#e8f4ff" }}>{user.name.split(" ")[0]}</span>
                 {favorites.length > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center font-bold"
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold"
                     style={{ background: "#f500c8", color: "white", fontSize: "8px" }}>{favorites.length}</span>
                 )}
               </button>
             ) : (
-              <>
+              <div className="flex items-center gap-2">
                 <button onClick={() => setAuthModal("login")}
-                  className="hidden sm:flex px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
-                  style={{ color: "rgba(180,200,220,0.7)", border: "1px solid rgba(0,245,212,0.15)" }}>
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
+                  style={{ color: "rgba(180,200,220,0.65)", border: "1px solid rgba(0,245,212,0.14)" }}>
+                  <Icon name="LogIn" size={13} />
                   Войти
                 </button>
                 <button onClick={() => setAuthModal("register")}
-                  className="neon-btn-solid px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap">
-                  Регистрация
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                  style={{ background: "linear-gradient(135deg, #00f5d4, rgba(0,200,170,1))", color: "#070b12" }}>
+                  <Icon name="UserPlus" size={13} />
+                  <span className="hidden sm:block">Регистрация</span>
+                  <span className="sm:hidden">Reg</span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -704,9 +725,9 @@ export default function Index() {
         </div>
       )}
 
-      {/* ── PREVIEW MODAL ── */}
+      {/* ── FILE VIEWER (fullscreen) ── */}
       {previewProduct && (
-        <PreviewModal
+        <FileViewer
           product={previewProduct}
           isPurchased={!!user?.purchased.includes(previewProduct.id)}
           onClose={() => setPreviewProduct(null)}
@@ -769,132 +790,231 @@ function ProductCard({ product, isFavorite, onFavorite, onOpen, delay = 0, ratin
   );
 }
 
-// ── PREVIEW MODAL ──
-function PreviewModal({ product, isPurchased, onClose, onBuy, viewerName }: {
+// ── FILE VIEWER — полноэкранный просмотрщик с пролистыванием ──
+function FileViewer({ product, isPurchased, onClose, onBuy, viewerName }: {
   product: Product; isPurchased: boolean; onClose: () => void; onBuy: () => void;
   viewerName?: string;
 }) {
-  // Персональный водяной знак: имя или guest-id
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = 8; // имитация страниц
+
   const wmLabel = viewerName
     ? `${viewerName.toUpperCase()} • NEXUS`
     : `ГОСТЬ-${Math.abs(product.id * 7919) % 9000 + 1000} • NEXUS`;
 
-  const rows = Array.from({ length: 8 });
-  const cols = Array.from({ length: 4 });
+  // Генерируем уникальный контент для каждой страницы
+  const pageConfigs = [
+    { title: "Титульный лист", hasGrid: false, hasBig: true },
+    { title: "Содержание", hasGrid: false, hasBig: false },
+    { title: "Введение", hasGrid: false, hasBig: false },
+    { title: "Раздел 1", hasGrid: true, hasBig: false },
+    { title: "Раздел 2", hasGrid: true, hasBig: false },
+    { title: "Таблицы и графики", hasGrid: true, hasBig: false },
+    { title: "Выводы", hasGrid: false, hasBig: false },
+    { title: "Приложения", hasGrid: false, hasBig: false },
+  ];
+  const cfg = pageConfigs[currentPage - 1];
+
+  const wmRows = Array.from({ length: 10 });
+  const wmCols = Array.from({ length: 5 });
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center p-4"
-      style={{ background: "rgba(7,11,18,0.95)", backdropFilter: "blur(16px)", zIndex: 60 }}>
-      <div className="w-full max-w-3xl rounded-2xl overflow-hidden"
-        style={{ background: "rgba(10,16,26,0.99)", border: "1px solid rgba(0,245,212,0.2)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+    <div className="fixed inset-0 flex flex-col" style={{ background: "#070b12", zIndex: 70 }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
-          <div className="flex items-center gap-3">
-            <span className="tag-badge" style={{ background: CATEGORY_COLORS[product.category] || "rgba(0,245,212,0.15)", color: CATEGORY_TEXT[product.category] || "#00f5d4" }}>
-              {product.category}
-            </span>
-            <h3 className="font-orbitron font-bold text-base" style={{ color: "#e8f4ff" }}>{product.title}</h3>
-          </div>
-          <div className="flex items-center gap-3">
-            {isPurchased && (
-              <button className="neon-btn-solid px-4 py-2 rounded-lg text-xs font-orbitron font-bold flex items-center gap-1.5">
-                <Icon name="Download" size={13} />
-                Скачать
-              </button>
-            )}
-            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <Icon name="X" size={15} style={{ color: "#e8f4ff" }} />
-            </button>
-          </div>
+      {/* ── Viewer Header ── */}
+      <div className="flex items-center justify-between px-5 py-3 flex-shrink-0"
+        style={{ background: "rgba(10,16,26,0.98)", borderBottom: "1px solid rgba(0,245,212,0.12)" }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all hover:bg-white/10"
+            style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+            <Icon name="ArrowLeft" size={15} style={{ color: "#e8f4ff" }} />
+          </button>
+          <span className="tag-badge flex-shrink-0"
+            style={{ background: CATEGORY_COLORS[product.category] || "rgba(0,245,212,0.15)", color: CATEGORY_TEXT[product.category] || "#00f5d4" }}>
+            {product.category}
+          </span>
+          <h3 className="font-orbitron font-bold text-sm truncate" style={{ color: "#e8f4ff" }}>{product.title}</h3>
         </div>
 
-        {/* Preview area — always visible, watermark is always on */}
-        <div className="relative overflow-hidden flex-1"
-          style={{ minHeight: "440px", userSelect: "none" }}
-          onContextMenu={e => e.preventDefault()}>
+        {/* Page indicator */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg"
+            style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.15)" }}>
+            <span className="font-orbitron text-xs neon-text">{currentPage}</span>
+            <span className="text-xs" style={{ color: "rgba(180,200,220,0.35)" }}>/ {totalPages}</span>
+          </div>
+          {isPurchased ? (
+            <button className="neon-btn-solid px-4 py-1.5 rounded-lg text-xs font-orbitron font-bold flex items-center gap-1.5">
+              <Icon name="Download" size={12} />
+              Скачать
+            </button>
+          ) : (
+            <button onClick={onBuy}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all"
+              style={{ background: "linear-gradient(135deg, #00f5d4, rgba(0,200,170,1))", color: "#070b12" }}>
+              <Icon name="ShoppingCart" size={12} />
+              {product.price.toLocaleString()} ₽
+            </button>
+          )}
+        </div>
+      </div>
 
-          {/* Document mockup — всегда виден */}
-          <div className="p-8" style={{ minHeight: "440px", pointerEvents: "none", userSelect: "none" }}>
-            <div className="rounded-xl p-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              {/* Title bar */}
-              <div className="mb-6">
-                <div className="h-6 rounded mb-3" style={{ background: "rgba(0,245,212,0.18)", width: "55%" }} />
-                <div className="h-3 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.07)", width: "92%" }} />
-                <div className="h-3 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.07)", width: "78%" }} />
-                <div className="h-3 rounded" style={{ background: "rgba(255,255,255,0.07)", width: "85%" }} />
+      {/* ── Document area ── */}
+      <div className="flex-1 overflow-hidden flex" style={{ background: "rgba(5,8,14,1)" }}>
+
+        {/* Left nav */}
+        <button
+          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          disabled={currentPage === 1}
+          className="flex-shrink-0 w-12 flex items-center justify-center transition-all"
+          style={{ color: currentPage === 1 ? "rgba(180,200,220,0.1)" : "rgba(0,245,212,0.5)", background: "rgba(10,16,26,0.6)" }}>
+          <Icon name="ChevronLeft" size={22} />
+        </button>
+
+        {/* Page content */}
+        <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+          <div className="relative w-full max-w-2xl animate-fade-in"
+            style={{ background: "rgba(15,22,35,1)", border: "1px solid rgba(0,245,212,0.12)", borderRadius: "12px", minHeight: "520px" }}
+            onContextMenu={e => e.preventDefault()}>
+
+            {/* Page content — never selectable */}
+            <div className="p-10" style={{ userSelect: "none", pointerEvents: "none" }}>
+
+              {/* Page number tag */}
+              <div className="flex justify-between items-center mb-8">
+                <div className="text-xs font-orbitron tracking-widest" style={{ color: "rgba(0,245,212,0.3)" }}>
+                  СТРАНИЦА {currentPage} — {cfg.title.toUpperCase()}
+                </div>
+                <div className="text-xs font-orbitron" style={{ color: "rgba(0,245,212,0.2)" }}>
+                  {product.title.slice(0, 20).toUpperCase()}
+                </div>
               </div>
-              {/* Cards grid */}
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                {[1,2,3,4].map(i => (
-                  <div key={i} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className="h-2 rounded mb-2" style={{ background: "rgba(0,245,212,0.13)", width: "65%" }} />
-                    <div className="h-2 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.06)", width: "100%" }} />
-                    <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.06)", width: "80%" }} />
+
+              {/* Big title page */}
+              {cfg.hasBig && (
+                <div className="text-center py-12">
+                  <div className="h-8 rounded-lg mx-auto mb-6" style={{ background: "rgba(0,245,212,0.2)", width: "70%" }} />
+                  <div className="h-4 rounded mx-auto mb-3" style={{ background: "rgba(255,255,255,0.07)", width: "50%" }} />
+                  <div className="h-3 rounded mx-auto mb-2" style={{ background: "rgba(255,255,255,0.05)", width: "40%" }} />
+                  <div className="mt-10 h-24 rounded-xl mx-auto" style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.1)", width: "60%" }} />
+                  <div className="h-3 rounded mx-auto mt-8" style={{ background: "rgba(255,255,255,0.04)", width: "30%" }} />
+                </div>
+              )}
+
+              {/* Grid layout */}
+              {cfg.hasGrid && (
+                <>
+                  <div className="h-5 rounded mb-5" style={{ background: "rgba(0,245,212,0.15)", width: "45%" }} />
+                  <div className="grid grid-cols-3 gap-3 mb-6">
+                    {[1,2,3].map(i => (
+                      <div key={i} className="rounded-lg p-3 flex flex-col gap-2"
+                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <div className="h-8 rounded" style={{ background: `rgba(${i===1?"0,245,212":i===2?"155,89,245":"0,200,255"},0.12)` }} />
+                        <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.06)", width: "80%" }} />
+                        <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.04)", width: "60%" }} />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {/* Text lines */}
-              <div className="space-y-2.5">
-                {[93, 76, 87, 62, 90, 70].map((w, i) => (
-                  <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.055)", width: `${w}%` }} />
-                ))}
-              </div>
+                  <div className="space-y-2">
+                    {[88, 72, 95, 65, 80, 70, 85].map((w, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="h-2 rounded flex-1" style={{ background: "rgba(255,255,255,0.055)", width: `${w}%` }} />
+                        <div className="h-2 rounded w-8" style={{ background: "rgba(0,245,212,0.1)" }} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Regular text page */}
+              {!cfg.hasGrid && !cfg.hasBig && (
+                <>
+                  <div className="h-5 rounded mb-6" style={{ background: "rgba(0,245,212,0.15)", width: "40%" }} />
+                  <div className="space-y-3 mb-6">
+                    {[92, 78, 88, 95, 70, 85, 60, 88, 75, 90].map((w, i) => (
+                      <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.06)", width: `${w}%` }} />
+                    ))}
+                  </div>
+                  <div className="h-4 rounded mb-4 mt-6" style={{ background: "rgba(155,89,245,0.12)", width: "35%" }} />
+                  <div className="space-y-2.5">
+                    {[85, 65, 92, 78, 70].map((w, i) => (
+                      <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.05)", width: `${w}%` }} />
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
 
-          {/* ── ПЕРСОНАЛЬНЫЕ ВОДЯНЫЕ ЗНАКИ ── */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ userSelect: "none" }}>
-            {rows.map((_, row) =>
-              cols.map((_, col) => (
-                <div key={`${row}-${col}`}
-                  className="absolute font-orbitron font-bold whitespace-nowrap"
-                  style={{
-                    top: `${row * 13 + 3}%`,
-                    left: `${col * 30 - 10 + (row % 2) * 15}%`,
-                    fontSize: "10px",
-                    color: "rgba(0,245,212,0.18)",
-                    transform: "rotate(-32deg)",
-                    letterSpacing: "0.15em",
-                  }}>
-                  {wmLabel}
-                </div>
-              ))
-            )}
-          </div>
+            {/* ── ПЕРСОНАЛЬНЫЕ ВОДЯНЫЕ ЗНАКИ — всегда поверх ── */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl" style={{ userSelect: "none" }}>
+              {wmRows.map((_, row) =>
+                wmCols.map((_, col) => (
+                  <div key={`${row}-${col}`}
+                    className="absolute font-orbitron font-bold whitespace-nowrap"
+                    style={{
+                      top: `${row * 11 + 2}%`,
+                      left: `${col * 28 - 8 + (row % 2) * 14}%`,
+                      fontSize: "9px",
+                      color: "rgba(0,245,212,0.14)",
+                      transform: "rotate(-30deg)",
+                      letterSpacing: "0.12em",
+                    }}>
+                    {wmLabel}
+                  </div>
+                ))
+              )}
+            </div>
 
-          {/* Overlay для незарегистрированных: нижняя часть затемнена + CTA */}
-          {!isPurchased && (
-            <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-end pb-8"
-              style={{ height: "55%", background: "linear-gradient(to bottom, transparent 0%, rgba(10,16,26,0.97) 45%)" }}>
-              <div className="text-center px-8">
-                <div className="flex items-center justify-center gap-2 mb-3">
-                  <Icon name="Lock" size={16} style={{ color: "#00f5d4" }} />
-                  <span className="font-orbitron font-bold text-sm" style={{ color: "#e8f4ff" }}>Полная версия доступна после оплаты</span>
-                </div>
-                <p className="text-xs mb-5 max-w-xs mx-auto" style={{ color: "rgba(180,200,220,0.5)", lineHeight: 1.6 }}>
-                  Файл виден в предпросмотре, но защищён персональными водяными знаками. Для скачивания — оплатите доступ.
-                </p>
-                <div className="flex items-center justify-center gap-4">
-                  <div className="font-orbitron font-black text-2xl neon-text">{product.price.toLocaleString()} ₽</div>
-                  <button onClick={onBuy} className="neon-btn-solid px-7 py-3 rounded-xl font-orbitron font-bold text-sm tracking-wide">
-                    КУПИТЬ →
+            {/* ── CTA overlay — только если не куплено (нижняя треть) ── */}
+            {!isPurchased && (
+              <div className="absolute bottom-0 left-0 right-0 rounded-b-xl flex flex-col items-center justify-end pb-8"
+                style={{ height: "42%", background: "linear-gradient(to bottom, transparent 0%, rgba(5,8,14,0.98) 50%)" }}>
+                <div className="text-center px-6">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Icon name="ShoppingCart" size={14} style={{ color: "#00f5d4" }} />
+                    <span className="font-orbitron font-bold text-sm" style={{ color: "#e8f4ff" }}>Купи — скачай без водяных знаков</span>
+                  </div>
+                  <p className="text-xs mb-4" style={{ color: "rgba(180,200,220,0.45)" }}>Просматривай бесплатно, скачивай после оплаты</p>
+                  <button onClick={onBuy} className="neon-btn-solid px-8 py-3 rounded-xl font-orbitron font-bold text-sm tracking-wide">
+                    КУПИТЬ {product.price.toLocaleString()} ₽ →
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-2.5 flex items-center gap-2 flex-shrink-0"
-          style={{ borderTop: "1px solid rgba(0,245,212,0.08)", background: "rgba(0,245,212,0.02)" }}>
-          <Icon name="ShieldCheck" size={13} style={{ color: "rgba(0,245,212,0.5)" }} />
-          <p className="text-xs" style={{ color: "rgba(180,200,220,0.3)" }}>
-            Защищено персональными водяными знаками: <span style={{ color: "rgba(0,245,212,0.5)" }}>{wmLabel}</span>
-          </p>
+        {/* Right nav */}
+        <button
+          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          disabled={currentPage === totalPages}
+          className="flex-shrink-0 w-12 flex items-center justify-center transition-all"
+          style={{ color: currentPage === totalPages ? "rgba(180,200,220,0.1)" : "rgba(0,245,212,0.5)", background: "rgba(10,16,26,0.6)" }}>
+          <Icon name="ChevronRight" size={22} />
+        </button>
+      </div>
+
+      {/* ── Footer: page dots + watermark info ── */}
+      <div className="flex-shrink-0 flex items-center justify-between px-5 py-2.5"
+        style={{ background: "rgba(10,16,26,0.98)", borderTop: "1px solid rgba(0,245,212,0.08)" }}>
+        {/* Page dots */}
+        <div className="flex items-center gap-1.5">
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button key={i} onClick={() => setCurrentPage(i + 1)}
+              className="transition-all rounded-full"
+              style={{
+                width: currentPage === i + 1 ? "20px" : "6px",
+                height: "6px",
+                background: currentPage === i + 1 ? "#00f5d4" : "rgba(0,245,212,0.2)",
+              }} />
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Icon name="ShieldCheck" size={12} style={{ color: "rgba(0,245,212,0.4)" }} />
+          <span className="text-xs font-orbitron" style={{ color: "rgba(0,245,212,0.35)", fontSize: "9px" }}>
+            {wmLabel}
+          </span>
         </div>
       </div>
     </div>
