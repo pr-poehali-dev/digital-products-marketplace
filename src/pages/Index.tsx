@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import Icon from "@/components/ui/icon";
 
 const HERO_IMAGE = "https://cdn.poehali.dev/projects/1e8b6658-dc0a-4ff0-8338-4fa5fe87361e/files/379f0cef-a9e7-4536-9c5d-cb8f0eaa6df3.jpg";
@@ -68,6 +68,8 @@ export default function Index() {
   const [favorites, setFavorites] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Все");
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
+  const [sortBy, setSortBy] = useState<"popular" | "cheap" | "expensive" | "rating">("popular");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -82,7 +84,13 @@ export default function Index() {
   const filteredProducts = PRODUCTS.filter(p => {
     const matchCat = selectedCategory === "Все" || p.category === selectedCategory;
     const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
+    const matchPrice = p.price >= priceRange[0] && p.price <= priceRange[1];
+    return matchCat && matchSearch && matchPrice;
+  }).sort((a, b) => {
+    if (sortBy === "cheap") return a.price - b.price;
+    if (sortBy === "expensive") return b.price - a.price;
+    if (sortBy === "rating") return b.rating - a.rating;
+    return b.sales - a.sales;
   });
 
   const favoriteProducts = PRODUCTS.filter(p => favorites.includes(p.id));
@@ -157,87 +165,91 @@ export default function Index() {
     <div className="min-h-screen grid-bg" style={{ fontFamily: "'Golos Text', sans-serif" }}>
 
       {/* ── NAVBAR ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center gap-4 px-6 py-3"
+      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-3"
         style={{ background: "rgba(7,11,18,0.88)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
+        <div className="flex items-center gap-3">
 
-        {/* Logo */}
-        <button onClick={() => navigate("home")} className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, #00f5d4, #9b59f5)" }}>
-            <span className="font-orbitron font-black text-xs" style={{ color: "#070b12" }}>NX</span>
+          {/* Logo */}
+          <button onClick={() => navigate("home")} className="flex items-center gap-2.5 flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #00f5d4, #9b59f5)" }}>
+              <span className="font-orbitron font-black text-xs" style={{ color: "#070b12" }}>NX</span>
+            </div>
+            <span className="font-orbitron font-bold text-base tracking-wider neon-text hidden sm:block">NEXUS</span>
+          </button>
+
+          {/* Nav links */}
+          <div className="hidden md:flex items-center gap-0.5 flex-shrink-0">
+            {(["home", "catalog", "upload"] as Page[]).map((p) => {
+              const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка" };
+              const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload" };
+              return (
+                <button key={p} onClick={() => navigate(p)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                  style={{
+                    color: page === p ? "#00f5d4" : "rgba(180,200,220,0.65)",
+                    background: page === p ? "rgba(0,245,212,0.08)" : "transparent",
+                    border: page === p ? "1px solid rgba(0,245,212,0.18)" : "1px solid transparent",
+                  }}>
+                  <Icon name={icons[p]} size={14} />
+                  {labels[p]}
+                </button>
+              );
+            })}
           </div>
-          <span className="font-orbitron font-bold text-base tracking-wider neon-text hidden sm:block">NEXUS</span>
-        </button>
 
-        {/* Nav links */}
-        <div className="hidden md:flex items-center gap-0.5">
-          {(["home", "catalog", "upload"] as Page[]).map((p) => {
-            const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка" };
-            const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload" };
-            return (
-              <button key={p} onClick={() => navigate(p)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+          {/* Search — center, always visible */}
+          <div className="flex-1 flex justify-center px-2">
+            <div className="relative w-full max-w-sm">
+              <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#00f5d4" }} />
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Поиск по названию..."
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm outline-none transition-all"
                 style={{
-                  color: page === p ? "#00f5d4" : "rgba(180,200,220,0.65)",
-                  background: page === p ? "rgba(0,245,212,0.08)" : "transparent",
-                  border: page === p ? "1px solid rgba(0,245,212,0.18)" : "1px solid transparent",
-                }}>
-                <Icon name={icons[p]} size={14} />
-                {labels[p]}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search — always visible, center */}
-        <div className="flex-1 max-w-xs mx-auto relative">
-          <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#00f5d4" }} />
-          <input
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Поиск по названию..."
-            className="w-full pl-8 pr-8 py-2 rounded-xl text-sm outline-none transition-all"
-            style={{
-              background: "rgba(13,20,32,0.9)",
-              border: searchQuery ? "1px solid rgba(0,245,212,0.4)" : "1px solid rgba(0,245,212,0.15)",
-              color: "#e8f4ff",
-              fontFamily: "'Golos Text', sans-serif",
-              boxShadow: searchQuery ? "0 0 15px rgba(0,245,212,0.1)" : "none",
-            }}
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
-              <Icon name="X" size={13} style={{ color: "rgba(180,200,220,0.5)" }} />
-            </button>
-          )}
-        </div>
-
-        {/* Auth + Profile */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {user ? (
-            <button onClick={() => navigate("profile")} className="relative">
-              <div className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
-                style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.25), rgba(155,89,245,0.25))", border: "1px solid rgba(0,245,212,0.35)" }}>
-                <span className="font-orbitron font-bold text-xs neon-text">{user.name.slice(0, 2).toUpperCase()}</span>
-              </div>
-              {favorites.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center font-bold"
-                  style={{ background: "#f500c8", color: "white", fontSize: "8px" }}>{favorites.length}</span>
+                  background: "rgba(13,20,32,0.95)",
+                  border: searchQuery ? "1px solid rgba(0,245,212,0.45)" : "1px solid rgba(0,245,212,0.18)",
+                  color: "#e8f4ff",
+                  fontFamily: "'Golos Text', sans-serif",
+                  boxShadow: searchQuery ? "0 0 20px rgba(0,245,212,0.12), inset 0 0 10px rgba(0,245,212,0.03)" : "none",
+                }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Icon name="X" size={13} style={{ color: "rgba(180,200,220,0.5)" }} />
+                </button>
               )}
-            </button>
-          ) : (
-            <>
-              <button onClick={() => setAuthModal("login")}
-                className="hidden sm:flex px-3 py-2 rounded-lg text-sm font-medium transition-all"
-                style={{ color: "rgba(180,200,220,0.7)", border: "1px solid rgba(0,245,212,0.15)" }}>
-                Войти
+            </div>
+          </div>
+
+          {/* Auth + Profile */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {user ? (
+              <button onClick={() => navigate("profile")} className="relative">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                  style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.25), rgba(155,89,245,0.25))", border: "1px solid rgba(0,245,212,0.35)" }}>
+                  <span className="font-orbitron font-bold text-xs neon-text">{user.name.slice(0, 2).toUpperCase()}</span>
+                </div>
+                {favorites.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center font-bold"
+                    style={{ background: "#f500c8", color: "white", fontSize: "8px" }}>{favorites.length}</span>
+                )}
               </button>
-              <button onClick={() => setAuthModal("register")}
-                className="neon-btn-solid px-3 py-2 rounded-lg text-sm font-bold font-orbitron">
-                REG
-              </button>
-            </>
-          )}
+            ) : (
+              <>
+                <button onClick={() => setAuthModal("login")}
+                  className="hidden sm:flex px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap"
+                  style={{ color: "rgba(180,200,220,0.7)", border: "1px solid rgba(0,245,212,0.15)" }}>
+                  Войти
+                </button>
+                <button onClick={() => setAuthModal("register")}
+                  className="neon-btn-solid px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap">
+                  Регистрация
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -349,23 +361,92 @@ export default function Index() {
         {/* ── CATALOG ── */}
         {page === "catalog" && (
           <div className="px-6 py-8 max-w-7xl mx-auto animate-fade-in">
-            <div className="mb-6">
-              <h1 className="font-orbitron font-bold text-2xl mb-1" style={{ color: "#e8f4ff" }}>КАТАЛОГ <span className="neon-text">_</span></h1>
-              <p style={{ color: "rgba(180,200,220,0.45)" }}>{filteredProducts.length} товаров</p>
+            <div className="mb-6 flex items-end justify-between flex-wrap gap-3">
+              <div>
+                <h1 className="font-orbitron font-bold text-2xl mb-1" style={{ color: "#e8f4ff" }}>КАТАЛОГ <span className="neon-text">_</span></h1>
+                <p style={{ color: "rgba(180,200,220,0.45)" }}>{filteredProducts.length} товаров</p>
+              </div>
+              {/* Sort */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-orbitron tracking-widest" style={{ color: "rgba(180,200,220,0.35)" }}>СОРТ:</span>
+                {([
+                  ["popular", "Популярные"],
+                  ["cheap", "Дешевле"],
+                  ["expensive", "Дороже"],
+                  ["rating", "Рейтинг"],
+                ] as [typeof sortBy, string][]).map(([val, label]) => (
+                  <button key={val} onClick={() => setSortBy(val)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                    style={{
+                      color: sortBy === val ? "#070b12" : "rgba(180,200,220,0.55)",
+                      background: sortBy === val ? "#00f5d4" : "rgba(0,245,212,0.05)",
+                      border: sortBy === val ? "none" : "1px solid rgba(0,245,212,0.12)",
+                    }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="flex gap-2 flex-wrap mb-8">
-              {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setSelectedCategory(cat)}
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all font-orbitron"
-                  style={{
-                    color: selectedCategory === cat ? "#070b12" : "#00f5d4",
-                    background: selectedCategory === cat ? "#00f5d4" : "rgba(0,245,212,0.07)",
-                    border: selectedCategory === cat ? "none" : "1px solid rgba(0,245,212,0.2)",
-                  }}>
-                  {cat}
-                </button>
-              ))}
+
+            {/* Filters row */}
+            <div className="rounded-2xl p-5 mb-7 flex flex-wrap gap-6 items-start"
+              style={{ background: "rgba(13,20,32,0.7)", border: "1px solid rgba(0,245,212,0.1)" }}>
+
+              {/* Type filter */}
+              <div className="flex-1 min-w-fit">
+                <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(0,245,212,0.6)" }}>ТИП ФАЙЛА</p>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: "Все", icon: "LayoutGrid" },
+                    { label: "Документы", icon: "FileText" },
+                    { label: "Презентации", icon: "Presentation" },
+                    { label: "Таблицы", icon: "Table" },
+                    { label: "Дизайн", icon: "Palette" },
+                  ].map(({ label, icon }) => (
+                    <button key={label} onClick={() => setSelectedCategory(label)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+                      style={{
+                        color: selectedCategory === label ? "#070b12" : CATEGORY_TEXT[label] || "#00f5d4",
+                        background: selectedCategory === label
+                          ? (CATEGORY_TEXT[label] || "#00f5d4")
+                          : (CATEGORY_COLORS[label] || "rgba(0,245,212,0.07)"),
+                        border: selectedCategory === label ? "none" : `1px solid ${CATEGORY_TEXT[label] || "#00f5d4"}30`,
+                      }}>
+                      <Icon name={icon} size={13} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Price filter */}
+              <div className="min-w-48">
+                <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(0,245,212,0.6)" }}>ЦЕНА</p>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    [0, 10000, "Любая"],
+                    [0, 500, "до 500 ₽"],
+                    [500, 1500, "500–1500 ₽"],
+                    [1500, 3500, "1500–3500 ₽"],
+                    [3500, 10000, "от 3500 ₽"],
+                  ].map(([min, max, label]) => {
+                    const active = priceRange[0] === min && priceRange[1] === max;
+                    return (
+                      <button key={String(label)} onClick={() => setPriceRange([min as number, max as number])}
+                        className="px-3 py-2 rounded-xl text-xs font-medium transition-all"
+                        style={{
+                          color: active ? "#070b12" : "rgba(155,89,245,0.9)",
+                          background: active ? "#9b59f5" : "rgba(155,89,245,0.07)",
+                          border: active ? "none" : "1px solid rgba(155,89,245,0.2)",
+                        }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredProducts.map((product, i) => (
                 <ProductCard key={product.id} product={product} isFavorite={favorites.includes(product.id)}
@@ -376,7 +457,9 @@ export default function Index() {
             {filteredProducts.length === 0 && (
               <div className="text-center py-24">
                 <Icon name="PackageSearch" size={48} style={{ color: "rgba(0,245,212,0.25)", margin: "0 auto 16px" }} />
-                <p className="font-orbitron" style={{ color: "rgba(180,200,220,0.35)" }}>Ничего не найдено</p>
+                <p className="font-orbitron mb-4" style={{ color: "rgba(180,200,220,0.35)" }}>Ничего не найдено</p>
+                <button onClick={() => { setSelectedCategory("Все"); setPriceRange([0, 10000]); setSearchQuery(""); }}
+                  className="neon-btn px-5 py-2 rounded-lg text-sm">Сбросить фильтры</button>
               </div>
             )}
           </div>
@@ -621,10 +704,15 @@ export default function Index() {
         </div>
       )}
 
-      {/* ── PREVIEW MODAL (watermark + screenshot protection) ── */}
+      {/* ── PREVIEW MODAL ── */}
       {previewProduct && (
-        <PreviewModal product={previewProduct} isPurchased={!!user?.purchased.includes(previewProduct.id)}
-          onClose={() => setPreviewProduct(null)} onBuy={() => { handleBuy(previewProduct); setPreviewProduct(null); }} />
+        <PreviewModal
+          product={previewProduct}
+          isPurchased={!!user?.purchased.includes(previewProduct.id)}
+          onClose={() => setPreviewProduct(null)}
+          onBuy={() => { handleBuy(previewProduct); setPreviewProduct(null); }}
+          viewerName={user?.name}
+        />
       )}
 
       {/* ── AUTH MODAL ── */}
@@ -682,23 +770,20 @@ function ProductCard({ product, isFavorite, onFavorite, onOpen, delay = 0, ratin
 }
 
 // ── PREVIEW MODAL ──
-function PreviewModal({ product, isPurchased, onClose, onBuy }: {
+function PreviewModal({ product, isPurchased, onClose, onBuy, viewerName }: {
   product: Product; isPurchased: boolean; onClose: () => void; onBuy: () => void;
+  viewerName?: string;
 }) {
-  const overlayRef = useRef<HTMLDivElement>(null);
+  // Персональный водяной знак: имя или guest-id
+  const wmLabel = viewerName
+    ? `${viewerName.toUpperCase()} • NEXUS`
+    : `ГОСТЬ-${Math.abs(product.id * 7919) % 9000 + 1000} • NEXUS`;
 
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.id = "no-screenshot-style";
-    style.textContent = `.preview-protected { -webkit-user-select: none; user-select: none; pointer-events: none; }`;
-    document.head.appendChild(style);
-    return () => { document.getElementById("no-screenshot-style")?.remove(); };
-  }, []);
-
-  const WATERMARK_TEXT = "NEXUS • ЗАЩИЩЕНО • NEXUS • ЗАЩИЩЕНО •";
+  const rows = Array.from({ length: 8 });
+  const cols = Array.from({ length: 4 });
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-4"
+    <div className="fixed inset-0 flex items-center justify-center p-4"
       style={{ background: "rgba(7,11,18,0.95)", backdropFilter: "blur(16px)", zIndex: 60 }}>
       <div className="w-full max-w-3xl rounded-2xl overflow-hidden"
         style={{ background: "rgba(10,16,26,0.99)", border: "1px solid rgba(0,245,212,0.2)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
@@ -726,83 +811,89 @@ function PreviewModal({ product, isPurchased, onClose, onBuy }: {
           </div>
         </div>
 
-        {/* Protected preview area */}
-        <div ref={overlayRef} className="relative overflow-hidden flex-1"
-          style={{ minHeight: "420px", userSelect: "none" }}
+        {/* Preview area — always visible, watermark is always on */}
+        <div className="relative overflow-hidden flex-1"
+          style={{ minHeight: "440px", userSelect: "none" }}
           onContextMenu={e => e.preventDefault()}>
 
-          {/* Document mockup */}
-          <div className="preview-protected p-8 h-full" style={{ minHeight: "420px" }}>
-            <div className="rounded-xl p-6 h-full" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+          {/* Document mockup — всегда виден */}
+          <div className="p-8" style={{ minHeight: "440px", pointerEvents: "none", userSelect: "none" }}>
+            <div className="rounded-xl p-6" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              {/* Title bar */}
               <div className="mb-6">
-                <div className="h-6 rounded mb-2" style={{ background: "rgba(0,245,212,0.2)", width: "60%" }} />
-                <div className="h-3 rounded mb-1" style={{ background: "rgba(255,255,255,0.08)", width: "90%" }} />
-                <div className="h-3 rounded mb-1" style={{ background: "rgba(255,255,255,0.08)", width: "75%" }} />
-                <div className="h-3 rounded" style={{ background: "rgba(255,255,255,0.08)", width: "82%" }} />
+                <div className="h-6 rounded mb-3" style={{ background: "rgba(0,245,212,0.18)", width: "55%" }} />
+                <div className="h-3 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.07)", width: "92%" }} />
+                <div className="h-3 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.07)", width: "78%" }} />
+                <div className="h-3 rounded" style={{ background: "rgba(255,255,255,0.07)", width: "85%" }} />
               </div>
+              {/* Cards grid */}
               <div className="grid grid-cols-2 gap-4 mb-6">
                 {[1,2,3,4].map(i => (
                   <div key={i} className="rounded-lg p-3" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div className="h-2 rounded mb-2" style={{ background: "rgba(0,245,212,0.15)", width: "70%" }} />
-                    <div className="h-2 rounded mb-1" style={{ background: "rgba(255,255,255,0.07)", width: "100%" }} />
-                    <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.07)", width: "80%" }} />
+                    <div className="h-2 rounded mb-2" style={{ background: "rgba(0,245,212,0.13)", width: "65%" }} />
+                    <div className="h-2 rounded mb-1.5" style={{ background: "rgba(255,255,255,0.06)", width: "100%" }} />
+                    <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.06)", width: "80%" }} />
                   </div>
                 ))}
               </div>
-              <div className="space-y-2">
-                {[95, 78, 88, 65, 90].map((w, i) => (
-                  <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.06)", width: `${w}%` }} />
+              {/* Text lines */}
+              <div className="space-y-2.5">
+                {[93, 76, 87, 62, 90, 70].map((w, i) => (
+                  <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.055)", width: `${w}%` }} />
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Watermark grid */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden"
-            style={{ userSelect: "none" }}>
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} className="absolute whitespace-nowrap font-orbitron font-bold"
-                style={{
-                  top: `${(i % 4) * 28 + 5}%`,
-                  left: i % 2 === 0 ? "-10%" : "20%",
-                  fontSize: "11px",
-                  color: "rgba(0,245,212,0.12)",
-                  transform: "rotate(-35deg)",
-                  letterSpacing: "0.2em",
-                }}>
-                {WATERMARK_TEXT}
-              </div>
-            ))}
+          {/* ── ПЕРСОНАЛЬНЫЕ ВОДЯНЫЕ ЗНАКИ ── */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ userSelect: "none" }}>
+            {rows.map((_, row) =>
+              cols.map((_, col) => (
+                <div key={`${row}-${col}`}
+                  className="absolute font-orbitron font-bold whitespace-nowrap"
+                  style={{
+                    top: `${row * 13 + 3}%`,
+                    left: `${col * 30 - 10 + (row % 2) * 15}%`,
+                    fontSize: "10px",
+                    color: "rgba(0,245,212,0.18)",
+                    transform: "rotate(-32deg)",
+                    letterSpacing: "0.15em",
+                  }}>
+                  {wmLabel}
+                </div>
+              ))
+            )}
           </div>
 
-          {/* Blur overlay if not purchased */}
+          {/* Overlay для незарегистрированных: нижняя часть затемнена + CTA */}
           {!isPurchased && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center"
-              style={{ background: "linear-gradient(to bottom, rgba(10,16,26,0.1) 0%, rgba(10,16,26,0.97) 55%)" }}>
+            <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-end pb-8"
+              style={{ height: "55%", background: "linear-gradient(to bottom, transparent 0%, rgba(10,16,26,0.97) 45%)" }}>
               <div className="text-center px-8">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-                  style={{ background: "rgba(0,245,212,0.08)", border: "1px solid rgba(0,245,212,0.2)" }}>
-                  <Icon name="Lock" size={28} style={{ color: "#00f5d4" }} />
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <Icon name="Lock" size={16} style={{ color: "#00f5d4" }} />
+                  <span className="font-orbitron font-bold text-sm" style={{ color: "#e8f4ff" }}>Полная версия доступна после оплаты</span>
                 </div>
-                <h3 className="font-orbitron font-bold text-xl mb-3" style={{ color: "#e8f4ff" }}>Файл защищён</h3>
-                <p className="text-sm mb-6 max-w-sm" style={{ color: "rgba(180,200,220,0.55)", lineHeight: 1.7 }}>
-                  Для скачивания полной версии необходимо оплатить доступ. Скриншоты и копирование заблокированы.
+                <p className="text-xs mb-5 max-w-xs mx-auto" style={{ color: "rgba(180,200,220,0.5)", lineHeight: 1.6 }}>
+                  Файл виден в предпросмотре, но защищён персональными водяными знаками. Для скачивания — оплатите доступ.
                 </p>
-                <div className="font-orbitron font-black text-3xl neon-text mb-6">{product.price.toLocaleString()} ₽</div>
-                <button onClick={onBuy} className="neon-btn-solid px-10 py-4 rounded-xl font-orbitron font-bold text-sm tracking-wide">
-                  КУПИТЬ И СКАЧАТЬ →
-                </button>
+                <div className="flex items-center justify-center gap-4">
+                  <div className="font-orbitron font-black text-2xl neon-text">{product.price.toLocaleString()} ₽</div>
+                  <button onClick={onBuy} className="neon-btn-solid px-7 py-3 rounded-xl font-orbitron font-bold text-sm tracking-wide">
+                    КУПИТЬ →
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* Screenshot warning */}
-        <div className="px-6 py-3 flex items-center gap-2 flex-shrink-0"
-          style={{ borderTop: "1px solid rgba(245,0,200,0.1)", background: "rgba(245,0,200,0.03)" }}>
-          <Icon name="ShieldAlert" size={14} style={{ color: "rgba(245,0,200,0.6)" }} />
-          <p className="text-xs" style={{ color: "rgba(180,200,220,0.35)" }}>
-            Файл защищён водяными знаками. Копирование и воспроизведение запрещено.
+        {/* Footer */}
+        <div className="px-6 py-2.5 flex items-center gap-2 flex-shrink-0"
+          style={{ borderTop: "1px solid rgba(0,245,212,0.08)", background: "rgba(0,245,212,0.02)" }}>
+          <Icon name="ShieldCheck" size={13} style={{ color: "rgba(0,245,212,0.5)" }} />
+          <p className="text-xs" style={{ color: "rgba(180,200,220,0.3)" }}>
+            Защищено персональными водяными знаками: <span style={{ color: "rgba(0,245,212,0.5)" }}>{wmLabel}</span>
           </p>
         </div>
       </div>
