@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Icon from "@/components/ui/icon";
 
 const HERO_IMAGE = "https://cdn.poehali.dev/projects/1e8b6658-dc0a-4ff0-8338-4fa5fe87361e/files/379f0cef-a9e7-4536-9c5d-cb8f0eaa6df3.jpg";
@@ -207,9 +207,9 @@ export default function Index() {
             })}
           </div>
 
-          {/* ── SEARCH — true center ── */}
-          <div className="flex-1 flex justify-center">
-            <div className="relative w-full" style={{ maxWidth: "380px" }}>
+          {/* ── SEARCH ── */}
+          <div className="flex-1 flex justify-start pl-2">
+            <div className="relative w-full" style={{ maxWidth: "340px" }}>
               <Icon name="Search" size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(0,245,212,0.6)" }} />
               <input
                 value={searchQuery}
@@ -312,10 +312,22 @@ export default function Index() {
         {page === "home" && (
           <div className="animate-fade-in">
             <div className="relative overflow-hidden" style={{ minHeight: "82vh" }}>
-              <div className="absolute inset-0">
-                <img src={HERO_IMAGE} alt="hero" className="w-full h-full object-cover opacity-22" />
-                <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(7,11,18,0.2) 0%, rgba(7,11,18,0.65) 60%, rgba(7,11,18,1) 100%)" }} />
-              </div>
+              {/* Animated gradient bg */}
+              <div className="absolute inset-0" style={{
+                background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,245,212,0.12) 0%, transparent 60%), radial-gradient(ellipse 60% 50% at 80% 30%, rgba(155,89,245,0.1) 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 20% 70%, rgba(0,200,255,0.07) 0%, transparent 50%), #070b12",
+              }} />
+              {/* Grid overlay */}
+              <div className="absolute inset-0" style={{
+                backgroundImage: "linear-gradient(rgba(0,245,212,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,245,212,0.04) 1px, transparent 1px)",
+                backgroundSize: "60px 60px",
+                maskImage: "radial-gradient(ellipse 90% 80% at 50% 0%, black 20%, transparent 80%)",
+              }} />
+              {/* Glow orbs */}
+              <div className="absolute rounded-full" style={{ width: 500, height: 500, top: "-120px", left: "50%", transform: "translateX(-50%)", background: "radial-gradient(circle, rgba(0,245,212,0.08) 0%, transparent 70%)", filter: "blur(40px)" }} />
+              <div className="absolute rounded-full" style={{ width: 300, height: 300, top: "20%", right: "5%", background: "radial-gradient(circle, rgba(155,89,245,0.1) 0%, transparent 70%)", filter: "blur(30px)" }} />
+              <div className="absolute rounded-full" style={{ width: 200, height: 200, bottom: "20%", left: "8%", background: "radial-gradient(circle, rgba(0,200,255,0.08) 0%, transparent 70%)", filter: "blur(25px)" }} />
+              {/* Bottom fade */}
+              <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: "linear-gradient(to bottom, transparent, #070b12)" }} />
               <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 py-24">
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-8 text-xs font-semibold tracking-widest font-orbitron"
                   style={{ background: "rgba(0,245,212,0.1)", border: "1px solid rgba(0,245,212,0.2)", color: "#00f5d4" }}>
@@ -487,48 +499,7 @@ export default function Index() {
         )}
 
         {/* ── UPLOAD ── */}
-        {page === "upload" && (
-          <div className="px-6 py-8 max-w-2xl mx-auto animate-fade-in">
-            <h1 className="font-orbitron font-bold text-2xl mb-2" style={{ color: "#e8f4ff" }}>ЗАГРУЗИТЬ ТОВАР <span className="neon-text">_</span></h1>
-            <p className="mb-8" style={{ color: "rgba(180,200,220,0.45)" }}>Заполни информацию о своём цифровом продукте</p>
-            <div className="space-y-5">
-              <UploadField label="НАЗВАНИЕ" placeholder="Например: Бизнес-план для стартапа 2025" />
-              <div>
-                <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>КАТЕГОРИЯ</label>
-                <select className="w-full px-4 py-3 rounded-xl outline-none"
-                  style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }}>
-                  <option value="">Выбери категорию</option>
-                  {CATEGORIES.slice(1).map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ОПИСАНИЕ</label>
-                <textarea rows={4} placeholder="Опиши продукт: что внутри, кому подойдёт, в чём уникальность"
-                  className="w-full px-4 py-3 rounded-xl outline-none resize-none"
-                  style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-              </div>
-              <PriceField />
-              <div>
-                <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ФАЙЛ</label>
-                <div className="rounded-xl p-8 text-center cursor-pointer hover-scale"
-                  style={{ background: "rgba(13,20,32,0.8)", border: "2px dashed rgba(0,245,212,0.2)" }}>
-                  <Icon name="UploadCloud" size={36} style={{ color: "#00f5d4", margin: "0 auto 12px" }} />
-                  <p className="font-medium mb-1" style={{ color: "#e8f4ff" }}>Перетащи или нажми</p>
-                  <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>PDF, PPTX, DOCX, XLSX, ZIP до 100 МБ</p>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#9b59f5" }}>ПРЕВЬЮ-ИЗОБРАЖЕНИЕ</label>
-                <div className="rounded-xl p-6 text-center cursor-pointer hover-scale"
-                  style={{ background: "rgba(13,20,32,0.8)", border: "2px dashed rgba(155,89,245,0.2)" }}>
-                  <Icon name="Image" size={28} style={{ color: "#9b59f5", margin: "0 auto 10px" }} />
-                  <p className="text-sm" style={{ color: "rgba(180,200,220,0.45)" }}>PNG или JPG до 5 МБ</p>
-                </div>
-              </div>
-              <button className="w-full neon-btn-solid py-4 rounded-xl font-orbitron font-bold text-sm tracking-wider">ОПУБЛИКОВАТЬ ТОВАР</button>
-            </div>
-          </div>
-        )}
+        {page === "upload" && <UploadPage categories={CATEGORIES} user={user} onAuthRequired={() => setAuthModal("register")} />}
 
         {/* ── PROFILE ── */}
         {page === "profile" && user && (
@@ -1216,6 +1187,110 @@ function ReviewModal({ product, userName, onSubmit, onClose }: {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── UPLOAD PAGE ──
+function UploadPage({ categories, user, onAuthRequired }: {
+  categories: string[]; user: { name: string } | null; onAuthRequired: () => void;
+}) {
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [previewName, setPreviewName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="px-6 py-8 max-w-2xl mx-auto animate-fade-in">
+      <h1 className="font-orbitron font-bold text-2xl mb-2" style={{ color: "#e8f4ff" }}>ЗАГРУЗИТЬ ТОВАР <span className="neon-text">_</span></h1>
+      <p className="mb-8" style={{ color: "rgba(180,200,220,0.45)" }}>Заполни информацию о своём цифровом продукте</p>
+      <div className="space-y-5">
+        <UploadField label="НАЗВАНИЕ" placeholder="Например: Бизнес-план для стартапа 2025" />
+        <div>
+          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>КАТЕГОРИЯ</label>
+          <select className="w-full px-4 py-3 rounded-xl outline-none"
+            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }}>
+            <option value="">Выбери категорию</option>
+            {categories.slice(1).map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ОПИСАНИЕ</label>
+          <textarea rows={4} placeholder="Опиши продукт: что внутри, кому подойдёт, в чём уникальность"
+            className="w-full px-4 py-3 rounded-xl outline-none resize-none"
+            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
+        </div>
+        <PriceField />
+
+        {/* ── FILE INPUT ── */}
+        <div>
+          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ФАЙЛ</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.zip,.rar"
+            className="hidden"
+            onChange={e => setFileName(e.target.files?.[0]?.name || null)}
+          />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl p-8 text-center cursor-pointer transition-all hover-scale"
+            style={{
+              background: fileName ? "rgba(0,245,212,0.05)" : "rgba(13,20,32,0.8)",
+              border: fileName ? "2px dashed rgba(0,245,212,0.5)" : "2px dashed rgba(0,245,212,0.2)",
+            }}>
+            <Icon name={fileName ? "FileCheck" : "UploadCloud"} size={36}
+              style={{ color: "#00f5d4", margin: "0 auto 12px" }} />
+            {fileName ? (
+              <>
+                <p className="font-medium mb-1 truncate max-w-xs mx-auto" style={{ color: "#00f5d4" }}>{fileName}</p>
+                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Нажми чтобы заменить</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium mb-1" style={{ color: "#e8f4ff" }}>Нажми для выбора файла</p>
+                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>PDF, PPTX, DOCX, XLSX, ZIP до 100 МБ</p>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── PREVIEW IMAGE INPUT ── */}
+        <div>
+          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#9b59f5" }}>ПРЕВЬЮ-ИЗОБРАЖЕНИЕ</label>
+          <input
+            ref={previewInputRef}
+            type="file"
+            accept=".png,.jpg,.jpeg,.webp"
+            className="hidden"
+            onChange={e => setPreviewName(e.target.files?.[0]?.name || null)}
+          />
+          <div
+            onClick={() => previewInputRef.current?.click()}
+            className="rounded-xl p-6 text-center cursor-pointer transition-all hover-scale"
+            style={{
+              background: previewName ? "rgba(155,89,245,0.05)" : "rgba(13,20,32,0.8)",
+              border: previewName ? "2px dashed rgba(155,89,245,0.5)" : "2px dashed rgba(155,89,245,0.2)",
+            }}>
+            <Icon name={previewName ? "ImageCheck" : "Image"} fallback="Image" size={28}
+              style={{ color: "#9b59f5", margin: "0 auto 10px" }} />
+            {previewName ? (
+              <>
+                <p className="text-sm truncate max-w-xs mx-auto" style={{ color: "#9b59f5" }}>{previewName}</p>
+                <p className="text-xs mt-1" style={{ color: "rgba(180,200,220,0.35)" }}>Нажми чтобы заменить</p>
+              </>
+            ) : (
+              <p className="text-sm" style={{ color: "rgba(180,200,220,0.45)" }}>Нажми для выбора изображения (PNG, JPG до 5 МБ)</p>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => { if (!user) onAuthRequired(); }}
+          className="w-full neon-btn-solid py-4 rounded-xl font-orbitron font-bold text-sm tracking-wider">
+          ОПУБЛИКОВАТЬ ТОВАР
+        </button>
       </div>
     </div>
   );
