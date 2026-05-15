@@ -1,0 +1,1 @@
+{"tests": [{"name": "Get reviews no product_id", "method": "GET", "path": "/", "expectedStatus": 400, "bodyMatcher": "partial"}]}

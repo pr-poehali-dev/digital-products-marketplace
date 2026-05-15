@@ -1,0 +1,1 @@
+{"tests": [{"name": "Auth required", "method": "GET", "path": "/", "expectedStatus": 401, "bodyMatcher": "partial"}]}

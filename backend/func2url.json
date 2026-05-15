@@ -1,0 +1,7 @@
+{
+  "withdraw": "https://functions.poehali.dev/44d3ff7b-66b3-4362-85ea-4a4e78a0ef25",
+  "reviews": "https://functions.poehali.dev/44f977bc-18dc-4dfe-a3d0-e5f29f688e29",
+  "purchases": "https://functions.poehali.dev/498eb5ba-557f-4716-86ff-ae68a99d2c97",
+  "products": "https://functions.poehali.dev/c27dccf7-e55b-44dc-8302-06794ba653c4",
+  "auth": "https://functions.poehali.dev/a966ab02-096a-4974-8c93-2dedd0bbe06e"
+}

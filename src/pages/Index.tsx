@@ -1,1327 +1,998 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
+import { apiFetch, API_AUTH, API_PRODUCTS, API_PURCHASES, CATEGORIES, CATEGORY_COLORS, CATEGORY_TEXT, CATEGORY_ICONS } from "@/lib/api";
+import type { Product, Review, User, Page, ViewMode } from "@/lib/api";
+import { AuthModal, BuyModal, StarRating, ReviewForm, WithdrawModal } from "@/components/marketplace/Modals";
+import FileViewer from "@/components/marketplace/FileViewer";
 
-const HERO_IMAGE = "https://cdn.poehali.dev/projects/1e8b6658-dc0a-4ff0-8338-4fa5fe87361e/files/379f0cef-a9e7-4536-9c5d-cb8f0eaa6df3.jpg";
-const IMG1 = "https://cdn.poehali.dev/projects/1e8b6658-dc0a-4ff0-8338-4fa5fe87361e/files/a1265ccf-1dec-4ed6-83d4-414ac0cf6e16.jpg";
-const IMG2 = "https://cdn.poehali.dev/projects/1e8b6658-dc0a-4ff0-8338-4fa5fe87361e/files/a91b2eec-6ef3-4326-8db5-efba74d81045.jpg";
+type PurchasedItem = Product & { purchased_at: string };
 
-type Product = {
-  id: number;
-  title: string;
-  author: string;
-  price: number;
-  category: string;
-  image: string;
-  rating: number;
-  sales: number;
-  description: string;
-};
+const API_REVIEWS = "https://functions.poehali.dev/44f977bc-18dc-4dfe-a3d0-e5f29f688e29";
 
-type Review = {
-  id: number;
-  productId: number;
-  userName: string;
-  rating: number;
-  text: string;
-  date: string;
-};
-
-type User = {
-  name: string;
-  email: string;
-  purchased: number[];
-};
-
-const PRODUCTS: Product[] = [
-  { id: 1, title: "Бизнес-план 2025", author: "Алексей М.", price: 990, category: "Документы", image: IMG2, rating: 4.9, sales: 312, description: "Профессиональный шаблон бизнес-плана для стартапа с финансовыми таблицами и стратегией" },
-  { id: 2, title: "Pitch Deck: Инвестиции", author: "Мария К.", price: 1490, category: "Презентации", image: IMG1, rating: 4.8, sales: 189, description: "30 слайдов для привлечения инвестиций, протестировано на 50+ питчах" },
-  { id: 3, title: "Финансовая модель", author: "Дмитрий В.", price: 2990, category: "Таблицы", image: IMG2, rating: 5.0, sales: 97, description: "Excel-модель для расчёта юнит-экономики и прогнозирования выручки" },
-  { id: 4, title: "Контент-план на 3 мес.", author: "Ольга Р.", price: 590, category: "Документы", image: IMG1, rating: 4.7, sales: 441, description: "Готовый контент-план для соцсетей с темами и рубриками на 90 дней" },
-  { id: 5, title: "UI Kit: Cyberpunk Style", author: "Тимур Н.", price: 3490, category: "Дизайн", image: IMG2, rating: 4.9, sales: 76, description: "200+ компонентов Figma в кибер-стиле, тёмная и светлая темы" },
-  { id: 6, title: "HR-политика компании", author: "Анна С.", price: 1290, category: "Документы", image: IMG1, rating: 4.6, sales: 203, description: "Полный пакет HR-документов: оффер, онбординг, правила, KPI-система" },
+const PRICE_RANGES: { label: string; range: [number, number] }[] = [
+  { label: "Любая", range: [0, 10000] },
+  { label: "до 500 ₽", range: [0, 500] },
+  { label: "500–1500 ₽", range: [500, 1500] },
+  { label: "1500–3500 ₽", range: [1500, 3500] },
+  { label: "от 3500 ₽", range: [3500, 10000] },
 ];
-
-const INITIAL_REVIEWS: Review[] = [
-  { id: 1, productId: 1, userName: "Игорь Т.", rating: 5, text: "Отличный шаблон, сэкономил кучу времени!", date: "2025-04-10" },
-  { id: 2, productId: 1, userName: "Светлана К.", rating: 4, text: "Хороший документ, всё по делу.", date: "2025-03-22" },
-  { id: 3, productId: 2, userName: "Андрей М.", rating: 5, text: "Питч-дек сразу понравился инвесторам.", date: "2025-04-05" },
-];
-
-const CATEGORIES = ["Все", "Документы", "Презентации", "Таблицы", "Дизайн"];
-type Page = "home" | "catalog" | "upload" | "profile";
-
-const CATEGORY_COLORS: Record<string, string> = {
-  "Документы": "rgba(0,245,212,0.15)",
-  "Презентации": "rgba(155,89,245,0.15)",
-  "Таблицы": "rgba(0,200,255,0.15)",
-  "Дизайн": "rgba(245,0,200,0.15)",
-};
-const CATEGORY_TEXT: Record<string, string> = {
-  "Документы": "#00f5d4",
-  "Презентации": "#9b59f5",
-  "Таблицы": "#00c8ff",
-  "Дизайн": "#f500c8",
-};
 
 export default function Index() {
   const [page, setPage] = useState<Page>("home");
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("nexus_token"));
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Все");
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 10000]);
-  const [sortBy, setSortBy] = useState<"popular" | "cheap" | "expensive" | "rating">("popular");
+  const [sortBy, setSortBy] = useState<"popular" | "cheap" | "expensive" | "rating" | "newest">("popular");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
-  const [user, setUser] = useState<User | null>(null);
   const [authModal, setAuthModal] = useState<"login" | "register" | null>(null);
-  const [reviews, setReviews] = useState<Review[]>(INITIAL_REVIEWS);
+  const [buyModal, setBuyModal] = useState<Product | null>(null);
   const [reviewModal, setReviewModal] = useState<Product | null>(null);
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [productReviews, setProductReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
-  const toggleFavorite = (id: number) => {
-    setFavorites(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]);
+  const loadProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const data = await apiFetch(`${API_PRODUCTS}/`);
+      if (Array.isArray(data)) setProducts(data);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingProducts(false);
+    }
   };
 
-  const filteredProducts = PRODUCTS.filter(p => {
-    const matchCat = selectedCategory === "Все" || p.category === selectedCategory;
-    const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchPrice = p.price >= priceRange[0] && p.price <= priceRange[1];
-    return matchCat && matchSearch && matchPrice;
-  }).sort((a, b) => {
-    if (sortBy === "cheap") return a.price - b.price;
-    if (sortBy === "expensive") return b.price - a.price;
-    if (sortBy === "rating") return b.rating - a.rating;
-    return b.sales - a.sales;
-  });
+  useEffect(() => {
+    const init = async () => {
+      const t = localStorage.getItem("nexus_token");
+      if (t) {
+        try {
+          const res = await apiFetch(`${API_AUTH}/me`, {}, t);
+          if (res && res.id) setUser(res);
+        } catch {
+          // ignore
+        }
+      }
+      await loadProducts();
+    };
+    init();
+  }, []);
 
-  const favoriteProducts = PRODUCTS.filter(p => favorites.includes(p.id));
-  const purchasedProducts = user ? PRODUCTS.filter(p => user.purchased.includes(p.id)) : [];
+  useEffect(() => {
+    if (selectedProduct) {
+      setLoadingReviews(true);
+      apiFetch(`${API_REVIEWS}/?product_id=${selectedProduct.id}`)
+        .then((data) => { if (Array.isArray(data)) setProductReviews(data); })
+        .catch(() => {})
+        .finally(() => setLoadingReviews(false));
+    } else {
+      setProductReviews([]);
+    }
+  }, [selectedProduct]);
+
+  const handleLogin = async (email: string, password: string) => {
+    const res = await apiFetch(`${API_AUTH}/login`, { method: "POST", body: JSON.stringify({ email, password }) });
+    if (res.error) throw new Error(res.error);
+    localStorage.setItem("nexus_token", res.token);
+    setToken(res.token);
+    setUser(res.user);
+    setAuthModal(null);
+  };
+
+  const handleRegister = async (name: string, email: string, password: string) => {
+    const res = await apiFetch(`${API_AUTH}/register`, { method: "POST", body: JSON.stringify({ name, email, password }) });
+    if (res.error) throw new Error(res.error);
+    localStorage.setItem("nexus_token", res.token);
+    setToken(res.token);
+    setUser(res.user);
+    setAuthModal(null);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("nexus_token");
+    setUser(null);
+    setToken(null);
+    setPage("home");
+  };
 
   const navigate = (p: Page) => {
     setPage(p);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleLogin = (email: string, password: string) => {
-    const stored = localStorage.getItem("nexus_users");
-    const users: (User & { password: string })[] = stored ? JSON.parse(stored) : [];
-    const found = users.find(u => u.email === email && u.password === password);
-    if (found) {
-      setUser({ name: found.name, email: found.email, purchased: found.purchased });
-      setAuthModal(null);
-    } else {
-      alert("Неверный email или пароль");
-    }
+  const toggleFavorite = (id: number) => {
+    setFavorites((prev) => prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]);
   };
 
-  const handleRegister = (name: string, email: string, password: string) => {
-    const stored = localStorage.getItem("nexus_users");
-    const users: (User & { password: string })[] = stored ? JSON.parse(stored) : [];
-    if (users.find(u => u.email === email)) {
-      alert("Этот email уже зарегистрирован");
-      return;
-    }
-    const newUser = { name, email, password, purchased: [] };
-    users.push(newUser);
-    localStorage.setItem("nexus_users", JSON.stringify(users));
-    setUser({ name, email, purchased: [] });
-    setAuthModal(null);
-  };
+  const filteredProducts = products
+    .filter((p) => {
+      const matchSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchCat = selectedCategory === "Все" || p.category === selectedCategory;
+      const matchPrice = p.price >= priceRange[0] && p.price <= priceRange[1];
+      return matchSearch && matchCat && matchPrice;
+    })
+    .sort((a, b) => {
+      if (sortBy === "cheap") return a.price - b.price;
+      if (sortBy === "expensive") return b.price - a.price;
+      if (sortBy === "rating") return b.rating - a.rating;
+      if (sortBy === "newest") return b.id - a.id;
+      return b.sales_count - a.sales_count;
+    });
 
-  const handleLogout = () => {
-    setUser(null);
-    navigate("home");
-  };
+  const isPurchased = (productId: number) => !!user && user.purchased.includes(productId);
 
-  const handleBuy = (product: Product) => {
-    if (!user) { setAuthModal("login"); setSelectedProduct(null); return; }
-    if (!user.purchased.includes(product.id)) {
-      const updated = { ...user, purchased: [...user.purchased, product.id] };
-      setUser(updated);
-      const stored = localStorage.getItem("nexus_users");
-      const users: (User & { password: string })[] = stored ? JSON.parse(stored) : [];
-      const idx = users.findIndex(u => u.email === user.email);
-      if (idx !== -1) { users[idx].purchased = updated.purchased; localStorage.setItem("nexus_users", JSON.stringify(users)); }
-    }
-    setSelectedProduct(null);
-  };
-
-  const addReview = (productId: number, rating: number, text: string) => {
-    if (!user) return;
-    const newReview: Review = {
-      id: Date.now(), productId, userName: user.name, rating, text,
-      date: new Date().toISOString().slice(0, 10),
-    };
-    setReviews(prev => [...prev, newReview]);
-    setReviewModal(null);
-  };
-
-  const productRating = (productId: number) => {
-    const pr = reviews.filter(r => r.productId === productId);
-    if (!pr.length) return PRODUCTS.find(p => p.id === productId)?.rating || 0;
-    return +(pr.reduce((a, r) => a + r.rating, 0) / pr.length).toFixed(1);
-  };
+  const initials = user ? user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) : "";
 
   return (
-    <div className="min-h-screen grid-bg" style={{ fontFamily: "'Golos Text', sans-serif" }}>
+    <div className="min-h-screen" style={{ background: "#070b12", fontFamily: "'Golos Text', sans-serif" }}>
 
       {/* ── NAVBAR ── */}
-      <nav className="fixed top-0 left-0 right-0 z-50"
-        style={{ background: "rgba(7,11,18,0.92)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
-        {/* thin accent line top */}
-        <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg, transparent, #00f5d4 30%, #9b59f5 70%, transparent)" }} />
-        <div className="flex items-center gap-3 px-5 py-2.5">
-
+      <nav className="fixed top-0 left-0 right-0 z-50" style={{ background: "rgba(7,11,18,0.94)", backdropFilter: "blur(24px)", borderBottom: "1px solid rgba(0,245,212,0.09)" }}>
+        <div className="h-0.5 w-full" style={{ background: "linear-gradient(90deg,transparent,#00f5d4 30%,#9b59f5 70%,transparent)" }} />
+        <div className="flex items-center gap-3 px-4 py-2.5">
           {/* Logo */}
-          <button onClick={() => navigate("home")} className="flex items-center gap-2 flex-shrink-0 group">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-all group-hover:scale-105"
-              style={{ background: "linear-gradient(135deg, #00f5d4, #9b59f5)", boxShadow: "0 0 14px rgba(0,245,212,0.3)" }}>
+          <button onClick={() => navigate("home")} className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#00f5d4,#9b59f5)", boxShadow: "0 0 14px rgba(0,245,212,0.3)" }}>
               <span className="font-orbitron font-black text-xs" style={{ color: "#070b12" }}>NX</span>
             </div>
             <span className="font-orbitron font-bold text-sm tracking-widest neon-text hidden lg:block">NEXUS</span>
           </button>
 
-          {/* separator */}
           <div className="hidden md:block h-5 w-px mx-1" style={{ background: "rgba(0,245,212,0.15)" }} />
 
           {/* Nav links */}
-          <div className="hidden md:flex items-center gap-0.5 flex-shrink-0">
-            {(["home", "catalog", "upload"] as Page[]).map((p) => {
-              const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузка" };
-              const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload" };
-              const active = page === p;
-              return (
-                <button key={p} onClick={() => navigate(p)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative"
-                  style={{
-                    color: active ? "#00f5d4" : "rgba(180,200,220,0.55)",
-                    background: active ? "rgba(0,245,212,0.07)" : "transparent",
-                  }}>
-                  {active && (
-                    <span className="absolute bottom-0 left-3 right-3 h-px rounded-full"
-                      style={{ background: "#00f5d4", boxShadow: "0 0 6px #00f5d4" }} />
-                  )}
-                  <Icon name={icons[p]} size={13} />
-                  {labels[p]}
-                </button>
-              );
-            })}
+          <div className="hidden md:flex items-center gap-1">
+            {([["home","Главная"],["catalog","Каталог"],["upload","Загрузка"]] as [Page,string][]).map(([p, label]) => (
+              <button key={p} onClick={() => navigate(p)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative"
+                style={{ color: page === p ? "#00f5d4" : "rgba(180,200,220,0.6)", background: page === p ? "rgba(0,245,212,0.07)" : "transparent" }}>
+                {label}
+                {page === p && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ background: "#00f5d4" }} />}
+              </button>
+            ))}
           </div>
 
-          {/* ── SEARCH ── */}
-          <div className="flex-1 flex justify-start pl-2">
-            <div className="relative w-full" style={{ maxWidth: "340px" }}>
-              <Icon name="Search" size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "rgba(0,245,212,0.6)" }} />
+          {/* Search */}
+          <div className="flex-1 flex justify-start pl-1">
+            <div className="relative w-full max-w-sm">
+              <Icon name="Search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "rgba(0,245,212,0.4)" }} />
               <input
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по названию файла..."
-                className="w-full pl-10 pr-9 py-2 rounded-xl text-sm outline-none transition-all"
-                style={{
-                  background: searchQuery ? "rgba(13,20,32,1)" : "rgba(13,20,32,0.7)",
-                  border: searchQuery ? "1px solid rgba(0,245,212,0.5)" : "1px solid rgba(0,245,212,0.14)",
-                  color: "#e8f4ff",
-                  fontFamily: "'Golos Text', sans-serif",
-                  boxShadow: searchQuery ? "0 0 18px rgba(0,245,212,0.1)" : "none",
-                }}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => { if (page !== "catalog") navigate("catalog"); }}
+                placeholder="Поиск продуктов..."
+                className="w-full pl-8 pr-3 py-1.5 rounded-xl outline-none text-sm"
+                style={{ background: "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.12)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }}
               />
-              {searchQuery ? (
-                <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-80">
-                  <Icon name="X" size={13} style={{ color: "rgba(180,200,220,0.5)" }} />
-                </button>
-              ) : (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-orbitron"
-                  style={{ color: "rgba(0,245,212,0.2)" }}>⌘K</span>
-              )}
             </div>
           </div>
 
-          {/* separator */}
           <div className="hidden md:block h-5 w-px mx-1" style={{ background: "rgba(0,245,212,0.15)" }} />
 
-          {/* Auth + Profile */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {user ? (
-              <button onClick={() => navigate("profile")} className="relative group flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all"
-                style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.18)" }}>
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-                  style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.3), rgba(155,89,245,0.3))" }}>
-                  <span className="font-orbitron font-black" style={{ fontSize: "9px", color: "#00f5d4" }}>{user.name.slice(0, 2).toUpperCase()}</span>
-                </div>
-                <span className="text-sm font-medium hidden sm:block" style={{ color: "#e8f4ff" }}>{user.name.split(" ")[0]}</span>
-                {favorites.length > 0 && (
-                  <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold"
-                    style={{ background: "#f500c8", color: "white", fontSize: "8px" }}>{favorites.length}</span>
-                )}
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button onClick={() => setAuthModal("login")}
-                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all"
-                  style={{ color: "rgba(180,200,220,0.65)", border: "1px solid rgba(0,245,212,0.14)" }}>
-                  <Icon name="LogIn" size={13} />
-                  Войти
-                </button>
-                <button onClick={() => setAuthModal("register")}
-                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all"
-                  style={{ background: "linear-gradient(135deg, #00f5d4, rgba(0,200,170,1))", color: "#070b12" }}>
-                  <Icon name="UserPlus" size={13} />
-                  <span className="hidden sm:block">Регистрация</span>
-                  <span className="sm:hidden">Reg</span>
-                </button>
+          {/* Auth */}
+          {user ? (
+            <button onClick={() => navigate("profile")} className="flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all flex-shrink-0"
+              style={{ background: page === "profile" ? "rgba(0,245,212,0.1)" : "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.15)" }}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-orbitron font-bold"
+                style={{ background: "linear-gradient(135deg,#00f5d4,#9b59f5)", color: "#070b12" }}>
+                {initials}
               </div>
-            )}
-          </div>
-        </div>
-      </nav>
-
-      {/* ── MOBILE BOTTOM NAV ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around px-2 py-3"
-        style={{ background: "rgba(7,11,18,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(0,245,212,0.1)" }}>
-        {(["home", "catalog", "upload", "profile"] as Page[]).map((p) => {
-          const icons: Record<string, string> = { home: "Home", catalog: "LayoutGrid", upload: "Upload", profile: "User" };
-          const labels: Record<string, string> = { home: "Главная", catalog: "Каталог", upload: "Загрузить", profile: "Профиль" };
-          return (
-            <button key={p} onClick={() => p === "profile" && !user ? setAuthModal("login") : navigate(p as Page)}
-              className="flex flex-col items-center gap-1 p-2 transition-all relative"
-              style={{ color: page === p ? "#00f5d4" : "rgba(180,200,220,0.35)" }}>
-              <Icon name={icons[p]} size={20} />
-              {p === "profile" && favorites.length > 0 && (
-                <span className="absolute -top-0.5 right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                  style={{ background: "#f500c8", fontSize: "7px", color: "white", fontWeight: "bold" }}>{favorites.length}</span>
-              )}
-              <span style={{ fontSize: "9px", fontFamily: "'Orbitron', sans-serif", letterSpacing: "0.04em" }}>{labels[p]}</span>
+              <span className="text-sm font-medium hidden lg:block" style={{ color: "#e8f4ff" }}>{user.name.split(" ")[0]}</span>
             </button>
-          );
-        })}
+          ) : (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={() => setAuthModal("login")} className="neon-btn px-3 py-1.5 rounded-lg text-sm font-medium hidden sm:block">Войти</button>
+              <button onClick={() => setAuthModal("register")} className="neon-btn-solid px-3 py-1.5 rounded-lg text-sm font-semibold font-orbitron">Регистрация</button>
+            </div>
+          )}
+        </div>
       </nav>
 
-      {/* ── SEARCH RESULTS BANNER ── */}
-      {searchQuery && (
-        <div className="fixed top-16 left-0 right-0 z-40 px-6 py-2 flex items-center justify-between"
-          style={{ background: "rgba(7,11,18,0.95)", borderBottom: "1px solid rgba(0,245,212,0.12)" }}>
-          <span className="text-sm" style={{ color: "rgba(180,200,220,0.6)" }}>
-            Поиск: <span style={{ color: "#00f5d4" }}>«{searchQuery}»</span> — найдено {filteredProducts.length}
-          </span>
-          <button onClick={() => setSearchQuery("")} className="text-xs neon-btn px-3 py-1 rounded-lg">очистить</button>
-        </div>
-      )}
-
-      <main className={`pb-24 md:pb-8 ${searchQuery ? "pt-24" : "pt-16"}`}>
+      {/* ── MAIN CONTENT ── */}
+      <main className="pt-[52px] pb-16 md:pb-0">
 
         {/* ── HOME ── */}
         {page === "home" && (
           <div className="animate-fade-in">
-            <div className="relative overflow-hidden" style={{ minHeight: "82vh" }}>
-              {/* Animated gradient bg */}
-              <div className="absolute inset-0" style={{
-                background: "radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,245,212,0.12) 0%, transparent 60%), radial-gradient(ellipse 60% 50% at 80% 30%, rgba(155,89,245,0.1) 0%, transparent 55%), radial-gradient(ellipse 50% 40% at 20% 70%, rgba(0,200,255,0.07) 0%, transparent 50%), #070b12",
-              }} />
-              {/* Grid overlay */}
-              <div className="absolute inset-0" style={{
-                backgroundImage: "linear-gradient(rgba(0,245,212,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(0,245,212,0.04) 1px, transparent 1px)",
-                backgroundSize: "60px 60px",
-                maskImage: "radial-gradient(ellipse 90% 80% at 50% 0%, black 20%, transparent 80%)",
-              }} />
-              {/* Glow orbs */}
-              <div className="absolute rounded-full" style={{ width: 500, height: 500, top: "-120px", left: "50%", transform: "translateX(-50%)", background: "radial-gradient(circle, rgba(0,245,212,0.08) 0%, transparent 70%)", filter: "blur(40px)" }} />
-              <div className="absolute rounded-full" style={{ width: 300, height: 300, top: "20%", right: "5%", background: "radial-gradient(circle, rgba(155,89,245,0.1) 0%, transparent 70%)", filter: "blur(30px)" }} />
-              <div className="absolute rounded-full" style={{ width: 200, height: 200, bottom: "20%", left: "8%", background: "radial-gradient(circle, rgba(0,200,255,0.08) 0%, transparent 70%)", filter: "blur(25px)" }} />
-              {/* Bottom fade */}
-              <div className="absolute bottom-0 left-0 right-0 h-32" style={{ background: "linear-gradient(to bottom, transparent, #070b12)" }} />
-              <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 py-24">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-8 text-xs font-semibold tracking-widest font-orbitron"
-                  style={{ background: "rgba(0,245,212,0.1)", border: "1px solid rgba(0,245,212,0.2)", color: "#00f5d4" }}>
+            {/* Hero */}
+            <section className="relative flex items-center justify-center" style={{ minHeight: "82vh" }}>
+              {/* Bg */}
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="absolute inset-0" style={{ background: "linear-gradient(135deg,rgba(0,245,212,0.04) 0%,rgba(7,11,18,1) 40%,rgba(155,89,245,0.04) 100%)" }} />
+                <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(rgba(0,245,212,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,212,0.025) 1px,transparent 1px)", backgroundSize: "60px 60px" }} />
+                <div className="absolute rounded-full" style={{ width: 500, height: 500, top: "10%", left: "60%", background: "radial-gradient(circle,rgba(0,245,212,0.06) 0%,transparent 65%)", filter: "blur(40px)" }} />
+                <div className="absolute rounded-full" style={{ width: 400, height: 400, top: "50%", left: "5%", background: "radial-gradient(circle,rgba(155,89,245,0.07) 0%,transparent 65%)", filter: "blur(40px)" }} />
+                <div className="absolute rounded-full" style={{ width: 300, height: 300, bottom: "5%", right: "10%", background: "radial-gradient(circle,rgba(245,0,200,0.04) 0%,transparent 65%)", filter: "blur(40px)" }} />
+              </div>
+              <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
+                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-8 text-xs font-orbitron tracking-widest"
+                  style={{ background: "rgba(0,245,212,0.08)", border: "1px solid rgba(0,245,212,0.2)", color: "#00f5d4" }}>
                   <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
                   ЦИФРОВОЙ МАРКЕТПЛЕЙС
                 </div>
-                <h1 className="font-orbitron font-black mb-6" style={{ fontSize: "clamp(2.5rem, 8vw, 5.5rem)", lineHeight: 1.05 }}>
-                  <span style={{ color: "#e8f4ff" }}>РЫНОК</span><br />
-                  <span className="neon-text">ЦИФРОВЫХ</span><br />
+                <h1 className="font-orbitron font-black leading-none mb-6" style={{ fontSize: "clamp(2.5rem,8vw,6rem)" }}>
+                  <span style={{ color: "#e8f4ff" }}>РЫНОК</span>
+                  <br />
+                  <span className="neon-text">ЦИФРОВЫХ</span>
+                  <br />
                   <span style={{ color: "#e8f4ff" }}>ПРОДУКТОВ</span>
                 </h1>
-                <p className="text-lg mb-10 max-w-lg" style={{ color: "rgba(180,200,220,0.65)", lineHeight: 1.7 }}>
-                  Покупай готовые презентации, документы и шаблоны — или продавай свои работы тысячам покупателей
+                <p className="text-lg mb-10 max-w-xl mx-auto" style={{ color: "rgba(180,200,220,0.6)", lineHeight: 1.7 }}>
+                  Покупай и продавай документы, презентации, шаблоны и дизайн-файлы. Мгновенная доставка, честные цены.
                 </p>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <button onClick={() => navigate("catalog")} className="neon-btn-solid px-10 py-4 rounded-xl text-sm font-bold font-orbitron tracking-wider">КАТАЛОГ →</button>
-                  <button onClick={() => user ? navigate("upload") : setAuthModal("register")} className="neon-btn px-10 py-4 rounded-xl text-sm font-bold font-orbitron tracking-wider">ПРОДАТЬ</button>
-                </div>
-                <div className="flex gap-12 mt-16">
-                  {[["1 200+", "товаров"], ["8 500+", "покупателей"], ["98%", "довольных"]].map(([num, label]) => (
-                    <div key={label} className="text-center">
-                      <div className="font-orbitron font-black text-2xl neon-text">{num}</div>
-                      <div className="text-xs mt-1" style={{ color: "rgba(180,200,220,0.45)", letterSpacing: "0.08em" }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-10 max-w-7xl mx-auto">
-              <div className="flex items-center justify-between mb-7">
-                <h2 className="font-orbitron font-bold text-xl" style={{ color: "#e8f4ff" }}>ПОПУЛЯРНОЕ <span className="neon-text">_</span></h2>
-                <button onClick={() => navigate("catalog")} className="neon-btn px-4 py-2 rounded-lg text-sm">Всё →</button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {PRODUCTS.slice(0, 3).map((product, i) => (
-                  <ProductCard key={product.id} product={product} isFavorite={favorites.includes(product.id)}
-                    onFavorite={toggleFavorite} onOpen={setSelectedProduct} delay={i * 0.1}
-                    rating={productRating(product.id)} />
-                ))}
-              </div>
-            </div>
-
-            <div className="px-6 pb-14 max-w-7xl mx-auto">
-              <div className="rounded-2xl relative p-10 overflow-hidden"
-                style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.06), rgba(155,89,245,0.08))", border: "1px solid rgba(0,245,212,0.12)" }}>
-                <div className="absolute top-0 right-0 w-80 h-80 rounded-full"
-                  style={{ background: "radial-gradient(circle, rgba(155,89,245,0.12), transparent)", transform: "translate(30%, -30%)" }} />
-                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                  <div>
-                    <h3 className="font-orbitron font-bold text-2xl mb-2" style={{ color: "#e8f4ff" }}>Начни продавать сегодня</h3>
-                    <p style={{ color: "rgba(180,200,220,0.55)" }}>Загрузи свои работы и получай пассивный доход</p>
-                  </div>
-                  <button onClick={() => user ? navigate("upload") : setAuthModal("register")}
-                    className="neon-btn-solid px-8 py-4 rounded-xl font-orbitron font-bold tracking-wide whitespace-nowrap text-sm">
-                    ЗАГРУЗИТЬ ТОВАР
+                <div className="flex flex-wrap items-center justify-center gap-4">
+                  <button onClick={() => navigate("catalog")} className="neon-btn-solid px-8 py-3.5 rounded-xl font-orbitron font-bold text-sm tracking-wider">
+                    КАТАЛОГ →
+                  </button>
+                  <button onClick={() => navigate("upload")} className="neon-btn px-8 py-3.5 rounded-xl font-orbitron font-bold text-sm tracking-wider">
+                    ПРОДАТЬ
                   </button>
                 </div>
               </div>
-            </div>
+            </section>
+
+            {/* Stats */}
+            <section className="py-12 px-4">
+              <div className="max-w-4xl mx-auto grid grid-cols-3 gap-4">
+                {[["1200+","товаров"],["8500+","покупателей"],["98%","довольных"]].map(([val, label]) => (
+                  <div key={label} className="text-center rounded-2xl p-6" style={{ background: "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.1)" }}>
+                    <div className="font-orbitron font-black text-3xl neon-text mb-1">{val}</div>
+                    <div className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Popular products */}
+            {products.length > 0 && (
+              <section className="py-8 px-4">
+                <div className="max-w-6xl mx-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="font-orbitron font-bold text-xl" style={{ color: "#e8f4ff" }}>Популярное</h2>
+                    <button onClick={() => navigate("catalog")} className="text-sm neon-text hover:underline">Смотреть все →</button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {products.slice(0, 3).map((p) => (
+                      <ProductCard key={p.id} product={p} viewMode="grid" isFavorite={favorites.includes(p.id)} isPurchased={isPurchased(p.id)}
+                        onFavorite={toggleFavorite} onPreview={(pr) => setPreviewProduct(pr)} onOpen={(pr) => setSelectedProduct(pr)} />
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* CTA Banner */}
+            <section className="py-12 px-4">
+              <div className="max-w-4xl mx-auto rounded-3xl p-10 text-center relative overflow-hidden"
+                style={{ background: "linear-gradient(135deg,rgba(0,245,212,0.07),rgba(155,89,245,0.07))", border: "1px solid rgba(0,245,212,0.15)" }}>
+                <div className="absolute inset-0" style={{ backgroundImage: "linear-gradient(rgba(0,245,212,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,212,0.02) 1px,transparent 1px)", backgroundSize: "30px 30px" }} />
+                <div className="relative z-10">
+                  <h2 className="font-orbitron font-black text-2xl mb-3" style={{ color: "#e8f4ff" }}>Начни продавать сегодня</h2>
+                  <p className="mb-6" style={{ color: "rgba(180,200,220,0.5)" }}>Загружай свои файлы и получай доход. 90% с каждой продажи.</p>
+                  <button onClick={() => user ? navigate("upload") : setAuthModal("register")} className="neon-btn-solid px-8 py-3 rounded-xl font-orbitron font-bold text-sm">
+                    НАЧАТЬ ПРОДАВАТЬ →
+                  </button>
+                </div>
+              </div>
+            </section>
           </div>
         )}
 
         {/* ── CATALOG ── */}
         {page === "catalog" && (
-          <div className="px-6 py-8 max-w-7xl mx-auto animate-fade-in">
-            <div className="mb-6 flex items-end justify-between flex-wrap gap-3">
-              <div>
-                <h1 className="font-orbitron font-bold text-2xl mb-1" style={{ color: "#e8f4ff" }}>КАТАЛОГ <span className="neon-text">_</span></h1>
-                <p style={{ color: "rgba(180,200,220,0.45)" }}>{filteredProducts.length} товаров</p>
-              </div>
+          <div className="max-w-7xl mx-auto px-4 py-8 animate-fade-in">
+            {/* Header */}
+            <div className="flex flex-wrap items-center gap-3 mb-6">
+              <h1 className="font-orbitron font-bold text-2xl" style={{ color: "#e8f4ff" }}>Каталог</h1>
+              <span className="tag-badge" style={{ background: "rgba(0,245,212,0.1)", color: "#00f5d4" }}>{filteredProducts.length} товаров</span>
+              <div className="flex-1" />
               {/* Sort */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-orbitron tracking-widest" style={{ color: "rgba(180,200,220,0.35)" }}>СОРТ:</span>
-                {([
-                  ["popular", "Популярные"],
-                  ["cheap", "Дешевле"],
-                  ["expensive", "Дороже"],
-                  ["rating", "Рейтинг"],
-                ] as [typeof sortBy, string][]).map(([val, label]) => (
-                  <button key={val} onClick={() => setSortBy(val)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
-                    style={{
-                      color: sortBy === val ? "#070b12" : "rgba(180,200,220,0.55)",
-                      background: sortBy === val ? "#00f5d4" : "rgba(0,245,212,0.05)",
-                      border: sortBy === val ? "none" : "1px solid rgba(0,245,212,0.12)",
-                    }}>
-                    {label}
+              <div className="flex items-center gap-1 flex-wrap">
+                {([["popular","Популярные"],["cheap","Дешевле"],["expensive","Дороже"],["rating","Рейтинг"],["newest","Новые"]] as [typeof sortBy, string][]).map(([s, l]) => (
+                  <button key={s} onClick={() => setSortBy(s)}
+                    className="px-3 py-1 rounded-lg text-xs font-medium transition-all"
+                    style={{ background: sortBy === s ? "rgba(0,245,212,0.15)" : "transparent", color: sortBy === s ? "#00f5d4" : "rgba(180,200,220,0.5)", border: `1px solid ${sortBy === s ? "rgba(0,245,212,0.3)" : "transparent"}` }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {/* View mode */}
+              <div className="flex items-center gap-1 p-1 rounded-lg" style={{ background: "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.1)" }}>
+                {(["grid","list"] as ViewMode[]).map((m) => (
+                  <button key={m} onClick={() => setViewMode(m)}
+                    className="w-7 h-7 rounded flex items-center justify-center transition-all"
+                    style={{ background: viewMode === m ? "rgba(0,245,212,0.15)" : "transparent", color: viewMode === m ? "#00f5d4" : "rgba(180,200,220,0.35)" }}>
+                    <Icon name={m === "grid" ? "LayoutGrid" : "List"} size={14} />
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Filters row */}
-            <div className="rounded-2xl p-5 mb-7 flex flex-wrap gap-6 items-start"
-              style={{ background: "rgba(13,20,32,0.7)", border: "1px solid rgba(0,245,212,0.1)" }}>
-
-              {/* Type filter */}
-              <div className="flex-1 min-w-fit">
-                <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(0,245,212,0.6)" }}>ТИП ФАЙЛА</p>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    { label: "Все", icon: "LayoutGrid" },
-                    { label: "Документы", icon: "FileText" },
-                    { label: "Презентации", icon: "Presentation" },
-                    { label: "Таблицы", icon: "Table" },
-                    { label: "Дизайн", icon: "Palette" },
-                  ].map(({ label, icon }) => (
-                    <button key={label} onClick={() => setSelectedCategory(label)}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all"
-                      style={{
-                        color: selectedCategory === label ? "#070b12" : CATEGORY_TEXT[label] || "#00f5d4",
-                        background: selectedCategory === label
-                          ? (CATEGORY_TEXT[label] || "#00f5d4")
-                          : (CATEGORY_COLORS[label] || "rgba(0,245,212,0.07)"),
-                        border: selectedCategory === label ? "none" : `1px solid ${CATEGORY_TEXT[label] || "#00f5d4"}30`,
-                      }}>
-                      <Icon name={icon} size={13} />
+            {/* Filters */}
+            <div className="rounded-2xl p-4 mb-6" style={{ background: "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.1)" }}>
+              {/* Category row */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {CATEGORIES.map((cat) => (
+                  <button key={cat} onClick={() => setSelectedCategory(cat)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
+                    style={{
+                      background: selectedCategory === cat ? (CATEGORY_COLORS[cat] || "rgba(0,245,212,0.15)") : "rgba(255,255,255,0.03)",
+                      color: selectedCategory === cat ? (CATEGORY_TEXT[cat] || "#00f5d4") : "rgba(180,200,220,0.5)",
+                      border: `1px solid ${selectedCategory === cat ? (CATEGORY_TEXT[cat] || "#00f5d4") + "40" : "rgba(255,255,255,0.06)"}`,
+                    }}>
+                    <Icon name={CATEGORY_ICONS[cat] || "File"} size={11} />
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              {/* Price row */}
+              <div className="flex flex-wrap gap-2">
+                {PRICE_RANGES.map(({ label, range }) => {
+                  const active = priceRange[0] === range[0] && priceRange[1] === range[1];
+                  return (
+                    <button key={label} onClick={() => setPriceRange(range)}
+                      className="px-3 py-1 rounded-lg text-xs transition-all"
+                      style={{ background: active ? "rgba(155,89,245,0.15)" : "rgba(255,255,255,0.03)", color: active ? "#9b59f5" : "rgba(180,200,220,0.45)", border: `1px solid ${active ? "rgba(155,89,245,0.3)" : "rgba(255,255,255,0.06)"}` }}>
                       {label}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Price filter */}
-              <div className="min-w-48">
-                <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(0,245,212,0.6)" }}>ЦЕНА</p>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    [0, 10000, "Любая"],
-                    [0, 500, "до 500 ₽"],
-                    [500, 1500, "500–1500 ₽"],
-                    [1500, 3500, "1500–3500 ₽"],
-                    [3500, 10000, "от 3500 ₽"],
-                  ].map(([min, max, label]) => {
-                    const active = priceRange[0] === min && priceRange[1] === max;
-                    return (
-                      <button key={String(label)} onClick={() => setPriceRange([min as number, max as number])}
-                        className="px-3 py-2 rounded-xl text-xs font-medium transition-all"
-                        style={{
-                          color: active ? "#070b12" : "rgba(155,89,245,0.9)",
-                          background: active ? "#9b59f5" : "rgba(155,89,245,0.07)",
-                          border: active ? "none" : "1px solid rgba(155,89,245,0.2)",
-                        }}>
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredProducts.map((product, i) => (
-                <ProductCard key={product.id} product={product} isFavorite={favorites.includes(product.id)}
-                  onFavorite={toggleFavorite} onOpen={setSelectedProduct} delay={i * 0.07}
-                  rating={productRating(product.id)} />
-              ))}
-            </div>
-            {filteredProducts.length === 0 && (
-              <div className="text-center py-24">
-                <Icon name="PackageSearch" size={48} style={{ color: "rgba(0,245,212,0.25)", margin: "0 auto 16px" }} />
-                <p className="font-orbitron mb-4" style={{ color: "rgba(180,200,220,0.35)" }}>Ничего не найдено</p>
-                <button onClick={() => { setSelectedCategory("Все"); setPriceRange([0, 10000]); setSearchQuery(""); }}
-                  className="neon-btn px-5 py-2 rounded-lg text-sm">Сбросить фильтры</button>
+            {/* Products */}
+            {loadingProducts ? (
+              <div className="flex justify-center py-20">
+                <div className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "rgba(0,245,212,0.3)", borderTopColor: "#00f5d4" }} />
+              </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="text-center py-20">
+                <Icon name="SearchX" size={40} className="mx-auto mb-4" style={{ color: "rgba(0,245,212,0.2)" }} />
+                <p className="font-orbitron text-lg mb-2" style={{ color: "rgba(180,200,220,0.4)" }}>Ничего не найдено</p>
+                <button onClick={() => { setSearchQuery(""); setSelectedCategory("Все"); setPriceRange([0,10000]); }} className="neon-btn px-5 py-2 rounded-xl text-sm mt-2">
+                  Сбросить фильтры
+                </button>
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredProducts.map((p) => (
+                  <ProductCard key={p.id} product={p} viewMode="grid" isFavorite={favorites.includes(p.id)} isPurchased={isPurchased(p.id)}
+                    onFavorite={toggleFavorite} onPreview={(pr) => setPreviewProduct(pr)} onOpen={(pr) => setSelectedProduct(pr)} />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filteredProducts.map((p) => (
+                  <ProductCard key={p.id} product={p} viewMode="list" isFavorite={favorites.includes(p.id)} isPurchased={isPurchased(p.id)}
+                    onFavorite={toggleFavorite} onPreview={(pr) => setPreviewProduct(pr)} onOpen={(pr) => setSelectedProduct(pr)} />
+                ))}
               </div>
             )}
           </div>
         )}
 
         {/* ── UPLOAD ── */}
-        {page === "upload" && <UploadPage categories={CATEGORIES} user={user} onAuthRequired={() => setAuthModal("register")} />}
-
-        {/* ── PROFILE ── */}
-        {page === "profile" && user && (
-          <div className="px-6 py-8 max-w-4xl mx-auto animate-fade-in">
-            <div className="rounded-2xl p-6 mb-8 relative overflow-hidden"
-              style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.05), rgba(155,89,245,0.07))", border: "1px solid rgba(0,245,212,0.1)" }}>
-              <div className="absolute top-0 right-0 w-64 h-64 rounded-full"
-                style={{ background: "radial-gradient(circle, rgba(0,245,212,0.08), transparent)", transform: "translate(30%, -30%)" }} />
-              <div className="relative flex items-center justify-between">
-                <div className="flex items-center gap-5">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0"
-                    style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.2), rgba(155,89,245,0.2))", border: "1px solid rgba(0,245,212,0.3)" }}>
-                    <span className="font-orbitron font-black text-xl neon-text">{user.name.slice(0, 2).toUpperCase()}</span>
-                  </div>
-                  <div>
-                    <h2 className="font-orbitron font-bold text-xl mb-1" style={{ color: "#e8f4ff" }}>{user.name}</h2>
-                    <p className="text-sm mb-3" style={{ color: "rgba(180,200,220,0.45)" }}>{user.email}</p>
-                    <div className="flex gap-5">
-                      <span className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>
-                        <span className="font-bold neon-text">{user.purchased.length}</span> покупок
-                      </span>
-                      <span className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>
-                        <span className="font-bold" style={{ color: "#f500c8" }}>{favorites.length}</span> в избранном
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <button onClick={handleLogout}
-                  className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                  style={{ color: "rgba(245,80,80,0.8)", border: "1px solid rgba(245,80,80,0.2)", background: "rgba(245,80,80,0.05)" }}>
-                  Выйти
-                </button>
-              </div>
-            </div>
-
-            {/* Purchased */}
-            {purchasedProducts.length > 0 && (
-              <div className="mb-10">
-                <h3 className="font-orbitron font-bold text-base mb-5 flex items-center gap-2" style={{ color: "#e8f4ff" }}>
-                  <Icon name="Download" size={16} style={{ color: "#00f5d4" }} />
-                  КУПЛЕННЫЕ <span className="neon-text ml-1">_</span>
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {purchasedProducts.map((p, i) => (
-                    <div key={p.id} className="rounded-2xl p-4 flex items-center gap-4 animate-fade-in"
-                      style={{ background: "rgba(13,20,32,0.8)", border: "1px solid rgba(0,245,212,0.12)", animationDelay: `${i * 0.07}s` }}>
-                      <img src={p.image} alt={p.title} className="w-14 h-14 rounded-xl object-cover opacity-70" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate" style={{ color: "#e8f4ff" }}>{p.title}</p>
-                        <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>{p.category}</p>
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <button onClick={() => setPreviewProduct(p)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold font-orbitron transition-all"
-                          style={{ background: "rgba(0,245,212,0.12)", border: "1px solid rgba(0,245,212,0.25)", color: "#00f5d4" }}>
-                          Открыть
-                        </button>
-                        <button onClick={() => setReviewModal(p)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                          style={{ background: "rgba(245,197,0,0.1)", border: "1px solid rgba(245,197,0,0.2)", color: "#f5c500" }}>
-                          Отзыв
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Favorites */}
-            <h3 className="font-orbitron font-bold text-base mb-5 flex items-center gap-2" style={{ color: "#e8f4ff" }}>
-              <Icon name="Heart" size={16} style={{ color: "#f500c8" }} />
-              ИЗБРАННОЕ <span className="neon-text ml-1">_</span>
-              <span className="text-sm font-normal" style={{ color: "rgba(180,200,220,0.35)", fontFamily: "'Golos Text'" }}>({favoriteProducts.length})</span>
-            </h3>
-            {favoriteProducts.length === 0 ? (
-              <div className="text-center py-12 rounded-2xl mb-10"
-                style={{ background: "rgba(13,20,32,0.5)", border: "1px dashed rgba(245,0,200,0.12)" }}>
-                <Icon name="HeartOff" size={36} style={{ color: "rgba(245,0,200,0.25)", margin: "0 auto 12px" }} />
-                <p className="mb-4" style={{ color: "rgba(180,200,220,0.35)" }}>Нет избранных товаров</p>
-                <button onClick={() => navigate("catalog")} className="neon-btn px-5 py-2 rounded-lg text-sm">Перейти в каталог</button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
-                {favoriteProducts.map((p, i) => (
-                  <ProductCard key={p.id} product={p} isFavorite={true}
-                    onFavorite={toggleFavorite} onOpen={setSelectedProduct} delay={i * 0.08}
-                    rating={productRating(p.id)} />
-                ))}
-              </div>
-            )}
-
-            {/* My products */}
-            <h3 className="font-orbitron font-bold text-base mb-5 flex items-center gap-2" style={{ color: "#e8f4ff" }}>
-              <Icon name="Package" size={16} style={{ color: "#9b59f5" }} />
-              МОИ ТОВАРЫ <span className="neon-text ml-1">_</span>
-            </h3>
-            <div className="text-center py-12 rounded-2xl"
-              style={{ background: "rgba(13,20,32,0.5)", border: "1px dashed rgba(155,89,245,0.12)" }}>
-              <Icon name="Plus" size={36} style={{ color: "rgba(155,89,245,0.3)", margin: "0 auto 12px" }} />
-              <p className="mb-4 text-sm" style={{ color: "rgba(180,200,220,0.35)" }}>Ты ещё не загружал товары</p>
-              <button onClick={() => navigate("upload")}
-                className="px-6 py-3 rounded-xl font-bold font-orbitron tracking-wide text-xs"
-                style={{ background: "rgba(155,89,245,0.12)", border: "1px solid rgba(155,89,245,0.25)", color: "#9b59f5" }}>
-                + ЗАГРУЗИТЬ ПЕРВЫЙ
-              </button>
-            </div>
-          </div>
+        {page === "upload" && (
+          <UploadPage user={user} token={token} onAuthRequired={() => setAuthModal("login")} onSuccess={() => navigate("catalog")} />
         )}
 
-        {/* Profile not logged in */}
+        {/* ── PROFILE ── */}
+        {page === "profile" && user && token && (
+          <ProfilePage
+            user={user}
+            token={token}
+            onLogout={handleLogout}
+            onUpdateBalance={(b) => setUser((u) => u ? { ...u, balance: b } : u)}
+            onOpenFile={(p) => setPreviewProduct(p)}
+          />
+        )}
         {page === "profile" && !user && (
-          <div className="flex flex-col items-center justify-center px-6 py-32 animate-fade-in">
-            <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6"
-              style={{ background: "rgba(0,245,212,0.08)", border: "1px solid rgba(0,245,212,0.2)" }}>
-              <Icon name="User" size={36} style={{ color: "#00f5d4" }} />
-            </div>
-            <h2 className="font-orbitron font-bold text-2xl mb-3" style={{ color: "#e8f4ff" }}>Войди в аккаунт</h2>
-            <p className="text-sm mb-8 text-center max-w-xs" style={{ color: "rgba(180,200,220,0.45)" }}>
-              Авторизуйся, чтобы видеть избранное, покупки и управлять своими товарами
-            </p>
-            <div className="flex gap-3">
-              <button onClick={() => setAuthModal("login")} className="neon-btn px-8 py-3 rounded-xl font-orbitron font-bold text-sm">ВОЙТИ</button>
-              <button onClick={() => setAuthModal("register")} className="neon-btn-solid px-8 py-3 rounded-xl font-orbitron font-bold text-sm">РЕГИСТРАЦИЯ</button>
-            </div>
+          <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+            <Icon name="User" size={48} className="mb-4" style={{ color: "rgba(0,245,212,0.2)" }} />
+            <p className="font-orbitron text-lg mb-4" style={{ color: "rgba(180,200,220,0.5)" }}>Войди чтобы открыть профиль</p>
+            <button onClick={() => setAuthModal("login")} className="neon-btn-solid px-6 py-2.5 rounded-xl font-orbitron font-bold text-sm">Войти</button>
           </div>
         )}
       </main>
 
+      {/* ── MOBILE BOTTOM NAV ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex"
+        style={{ background: "rgba(7,11,18,0.97)", borderTop: "1px solid rgba(0,245,212,0.1)", backdropFilter: "blur(20px)" }}>
+        {([["home","Home","Главная"],["catalog","LayoutGrid","Каталог"],["upload","Upload","Загрузка"],["profile","User","Профиль"]] as [Page,string,string][]).map(([p, icon, label]) => (
+          <button key={p} onClick={() => navigate(p)} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-all"
+            style={{ color: page === p ? "#00f5d4" : "rgba(180,200,220,0.35)" }}>
+            <Icon name={icon} size={20} />
+            <span className="text-[10px] font-orbitron">{label}</span>
+          </button>
+        ))}
+      </nav>
+
       {/* ── PRODUCT DETAIL MODAL ── */}
       {selectedProduct && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-6"
-          style={{ background: "rgba(7,11,18,0.88)", backdropFilter: "blur(12px)" }}
-          onClick={() => setSelectedProduct(null)}>
-          <div className="w-full max-w-2xl rounded-t-3xl md:rounded-2xl overflow-hidden animate-slide-up max-h-[90vh] overflow-y-auto"
-            style={{ background: "rgba(13,20,32,0.99)", border: "1px solid rgba(0,245,212,0.15)" }}
-            onClick={e => e.stopPropagation()}>
-
-            <div className="relative h-52 overflow-hidden">
-              <img src={selectedProduct.image} alt={selectedProduct.title} className="w-full h-full object-cover opacity-55" />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(13,20,32,1) 0%, transparent 55%)" }} />
-              <button onClick={() => setSelectedProduct(null)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: "rgba(7,11,18,0.75)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <Icon name="X" size={15} style={{ color: "#e8f4ff" }} />
+        <div className="fixed inset-0 flex items-center justify-center p-4" style={{ background: "rgba(7,11,18,0.9)", backdropFilter: "blur(16px)", zIndex: 60 }}>
+          <div className="w-full max-w-3xl rounded-2xl overflow-hidden" style={{ background: "rgba(10,16,26,0.99)", border: "1px solid rgba(0,245,212,0.15)", maxHeight: "92vh" }}>
+            <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: "1px solid rgba(0,245,212,0.1)" }}>
+              <span className="tag-badge" style={{ background: CATEGORY_COLORS[selectedProduct.category] || "rgba(0,245,212,0.1)", color: CATEGORY_TEXT[selectedProduct.category] || "#00f5d4" }}>{selectedProduct.category}</span>
+              <button onClick={() => setSelectedProduct(null)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <Icon name="X" size={14} style={{ color: "#e8f4ff" }} />
               </button>
-              <div className="absolute bottom-4 left-5">
-                <span className="tag-badge" style={{ background: CATEGORY_COLORS[selectedProduct.category] || "rgba(0,245,212,0.15)", color: CATEGORY_TEXT[selectedProduct.category] || "#00f5d4" }}>
-                  {selectedProduct.category}
-                </span>
-              </div>
             </div>
+            <div className="overflow-y-auto" style={{ maxHeight: "calc(92vh - 60px)" }}>
+              <div className="flex flex-col sm:flex-row gap-0">
+                {/* Left: image */}
+                <div className="sm:w-64 flex-shrink-0 p-5">
+                  {selectedProduct.preview_url ? (
+                    <img src={selectedProduct.preview_url} alt={selectedProduct.title} className="w-full rounded-xl object-cover" style={{ aspectRatio: "3/4" }} />
+                  ) : (
+                    <div className="w-full rounded-xl flex flex-col items-center justify-center gap-2" style={{ aspectRatio: "3/4", background: "rgba(0,245,212,0.05)", border: "1px solid rgba(0,245,212,0.1)" }}>
+                      <Icon name={CATEGORY_ICONS[selectedProduct.category] || "File"} size={36} style={{ color: "rgba(0,245,212,0.3)" }} />
+                      <span className="font-orbitron text-xs uppercase" style={{ color: "rgba(0,245,212,0.3)" }}>{selectedProduct.file_format}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Right: info */}
+                <div className="flex-1 p-5 pt-3 sm:pt-5">
+                  <h2 className="font-orbitron font-bold text-xl mb-1" style={{ color: "#e8f4ff" }}>{selectedProduct.title}</h2>
+                  <p className="text-sm mb-3" style={{ color: "rgba(180,200,220,0.45)" }}>Автор: {selectedProduct.author}</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <StarRating value={Math.round(selectedProduct.rating)} size={14} />
+                    <span className="text-sm font-orbitron" style={{ color: "#f5b400" }}>{selectedProduct.rating.toFixed(1)}</span>
+                    <span className="text-xs" style={{ color: "rgba(180,200,220,0.35)" }}>{selectedProduct.sales_count} продаж</span>
+                  </div>
+                  <p className="text-sm mb-5 leading-relaxed" style={{ color: "rgba(180,200,220,0.6)" }}>{selectedProduct.description}</p>
+                  <div className="font-orbitron font-black text-3xl neon-text mb-5">{selectedProduct.price.toLocaleString()} ₽</div>
+                  <div className="flex flex-wrap gap-3 mb-6">
+                    <button onClick={() => setPreviewProduct(selectedProduct)} className="neon-btn flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium">
+                      <Icon name="Eye" size={14} />Предпросмотр
+                    </button>
+                    {isPurchased(selectedProduct.id) ? (
+                      <span className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-orbitron font-bold" style={{ background: "rgba(0,245,212,0.08)", color: "#00f5d4", border: "1px solid rgba(0,245,212,0.2)" }}>
+                        <Icon name="CheckCircle" size={14} />Куплено
+                      </span>
+                    ) : (
+                      <button onClick={() => user ? setBuyModal(selectedProduct) : setAuthModal("login")} className="neon-btn-solid flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-orbitron font-bold">
+                        <Icon name="ShoppingCart" size={14} />Купить
+                      </button>
+                    )}
+                  </div>
 
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-3">
-                <h2 className="font-orbitron font-bold text-xl leading-tight" style={{ color: "#e8f4ff", flex: 1, marginRight: "12px" }}>
-                  {selectedProduct.title}
-                </h2>
-                <button onClick={() => toggleFavorite(selectedProduct.id)}
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
-                  style={{ background: favorites.includes(selectedProduct.id) ? "rgba(245,0,200,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid rgba(245,0,200,0.2)" }}>
-                  <Icon name="Heart" size={15} style={{ color: favorites.includes(selectedProduct.id) ? "#f500c8" : "rgba(180,200,220,0.4)" }} />
-                </button>
+                  {/* Reviews */}
+                  {user && isPurchased(selectedProduct.id) && (
+                    <div className="mb-5">
+                      <ReviewForm productId={selectedProduct.id} token={token!} onSuccess={() => {
+                        apiFetch(`${API_REVIEWS}/?product_id=${selectedProduct.id}`)
+                          .then((d) => { if (Array.isArray(d)) setProductReviews(d); });
+                      }} />
+                    </div>
+                  )}
+
+                  <div>
+                    <p className="font-orbitron text-xs tracking-widest mb-3" style={{ color: "rgba(0,245,212,0.4)" }}>ОТЗЫВЫ {productReviews.length > 0 ? `(${productReviews.length})` : ""}</p>
+                    {loadingReviews ? (
+                      <p className="text-xs" style={{ color: "rgba(180,200,220,0.3)" }}>Загрузка...</p>
+                    ) : productReviews.length === 0 ? (
+                      <p className="text-xs" style={{ color: "rgba(180,200,220,0.25)" }}>Пока нет отзывов</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {productReviews.map((r) => (
+                          <div key={r.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium" style={{ color: "#e8f4ff" }}>{r.user_name}</span>
+                              <div className="flex items-center gap-1">
+                                <StarRating value={r.rating} size={11} />
+                                <span className="text-xs ml-1" style={{ color: "rgba(180,200,220,0.35)" }}>{r.created_at?.slice(0,10)}</span>
+                              </div>
+                            </div>
+                            {r.text && <p className="text-xs leading-relaxed" style={{ color: "rgba(180,200,220,0.55)" }}>{r.text}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-
-              <p className="text-sm mb-4" style={{ color: "rgba(180,200,220,0.6)", lineHeight: 1.6 }}>{selectedProduct.description}</p>
-
-              <div className="flex items-center gap-4 mb-5 text-xs" style={{ color: "rgba(180,200,220,0.45)" }}>
-                <span className="flex items-center gap-1"><Icon name="User" size={12} />{selectedProduct.author}</span>
-                <span className="flex items-center gap-1"><Icon name="Star" size={12} style={{ color: "#f5c842" }} />{productRating(selectedProduct.id)}</span>
-                <span className="flex items-center gap-1"><Icon name="ShoppingBag" size={12} />{selectedProduct.sales} продаж</span>
-              </div>
-
-              {/* Preview button */}
-              <button onClick={() => { setPreviewProduct(selectedProduct); setSelectedProduct(null); }}
-                className="w-full mb-3 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2"
-                style={{ background: "rgba(155,89,245,0.1)", border: "1px solid rgba(155,89,245,0.25)", color: "#9b59f5" }}>
-                <Icon name="Eye" size={15} />
-                Предпросмотр
-              </button>
-
-              <div className="flex items-center gap-4 mb-6">
-                <div className="font-orbitron font-black text-3xl neon-text">{selectedProduct.price.toLocaleString()} ₽</div>
-                <button onClick={() => handleBuy(selectedProduct)}
-                  className="flex-1 neon-btn-solid py-3 rounded-xl font-orbitron font-bold tracking-wide text-sm">
-                  {user?.purchased.includes(selectedProduct.id) ? "СКАЧАТЬ →" : "КУПИТЬ →"}
-                </button>
-              </div>
-
-              {/* Reviews */}
-              <ReviewsSection productId={selectedProduct.id} reviews={reviews} />
             </div>
           </div>
         </div>
       )}
 
-      {/* ── FILE VIEWER (fullscreen) ── */}
+      {/* ── FILE VIEWER ── */}
       {previewProduct && (
         <FileViewer
           product={previewProduct}
-          isPurchased={!!user?.purchased.includes(previewProduct.id)}
-          onClose={() => setPreviewProduct(null)}
-          onBuy={() => { handleBuy(previewProduct); setPreviewProduct(null); }}
+          isPurchased={isPurchased(previewProduct.id)}
           viewerName={user?.name}
+          onClose={() => setPreviewProduct(null)}
+          onBuy={() => { if (user) { setBuyModal(previewProduct); } else { setAuthModal("login"); } }}
+        />
+      )}
+
+      {/* ── BUY MODAL ── */}
+      {buyModal && (
+        <BuyModal
+          product={buyModal}
+          token={token}
+          onClose={() => setBuyModal(null)}
+          onSuccess={(productId) => {
+            setUser((u) => u ? { ...u, purchased: [...u.purchased, productId] } : u);
+            setBuyModal(null);
+          }}
         />
       )}
 
       {/* ── AUTH MODAL ── */}
       {authModal && (
-        <AuthModal mode={authModal} onLogin={handleLogin} onRegister={handleRegister}
-          onClose={() => setAuthModal(null)} onSwitch={m => setAuthModal(m)} />
-      )}
-
-      {/* ── REVIEW MODAL ── */}
-      {reviewModal && user && (
-        <ReviewModal product={reviewModal} userName={user.name}
-          onSubmit={(rating, text) => addReview(reviewModal.id, rating, text)}
-          onClose={() => setReviewModal(null)} />
+        <AuthModal
+          mode={authModal}
+          onClose={() => setAuthModal(null)}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onSwitch={(m) => setAuthModal(m)}
+        />
       )}
     </div>
   );
 }
 
-// ── PRODUCT CARD ──
-function ProductCard({ product, isFavorite, onFavorite, onOpen, delay = 0, rating }: {
-  product: Product; isFavorite: boolean; onFavorite: (id: number) => void;
-  onOpen: (p: Product) => void; delay?: number; rating: number;
+// ── ProductCard ──
+function ProductCard({ product, viewMode, isFavorite, isPurchased, onFavorite, onPreview, onOpen }: {
+  product: Product; viewMode: ViewMode; isFavorite: boolean; isPurchased: boolean;
+  onFavorite: (id: number) => void; onPreview: (p: Product) => void; onOpen: (p: Product) => void;
 }) {
-  return (
-    <div className="rounded-2xl overflow-hidden hover-scale cursor-pointer animate-fade-in"
-      style={{ background: "rgba(13,20,32,0.85)", border: "1px solid rgba(26,37,53,1)", animationDelay: `${delay}s` }}
-      onClick={() => onOpen(product)}>
-      <div className="relative h-44 overflow-hidden">
-        <img src={product.image} alt={product.title} className="w-full h-full object-cover opacity-65 transition-all duration-500 hover:opacity-85 hover:scale-105" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(13,20,32,0.95) 0%, transparent 55%)" }} />
-        <div className="absolute top-3 left-3">
-          <span className="tag-badge" style={{ background: CATEGORY_COLORS[product.category] || "rgba(0,245,212,0.15)", color: CATEGORY_TEXT[product.category] || "#00f5d4" }}>
-            {product.category}
-          </span>
-        </div>
-        <button className="absolute top-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center transition-all"
-          style={{ background: isFavorite ? "rgba(245,0,200,0.2)" : "rgba(7,11,18,0.65)", border: isFavorite ? "1px solid rgba(245,0,200,0.4)" : "1px solid rgba(255,255,255,0.07)" }}
-          onClick={e => { e.stopPropagation(); onFavorite(product.id); }}>
-          <Icon name="Heart" size={13} style={{ color: isFavorite ? "#f500c8" : "rgba(180,200,220,0.45)" }} />
-        </button>
-      </div>
-      <div className="p-4">
-        <h3 className="font-semibold mb-1 leading-snug" style={{ color: "#e8f4ff" }}>{product.title}</h3>
-        <p className="text-xs mb-3" style={{ color: "rgba(180,200,220,0.4)" }}>{product.author}</p>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs" style={{ color: "rgba(180,200,220,0.38)" }}>
-            <span className="flex items-center gap-1"><Icon name="Star" size={11} style={{ color: "#f5c842" }} />{rating}</span>
-            <span>{product.sales} продаж</span>
-          </div>
-          <span className="font-orbitron font-bold text-sm neon-text">{product.price.toLocaleString()} ₽</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const catColor = CATEGORY_COLORS[product.category] || "rgba(0,245,212,0.15)";
+  const catText = CATEGORY_TEXT[product.category] || "#00f5d4";
+  const catIcon = CATEGORY_ICONS[product.category] || "File";
 
-// ── FILE VIEWER — полноэкранный просмотрщик с пролистыванием ──
-function FileViewer({ product, isPurchased, onClose, onBuy, viewerName }: {
-  product: Product; isPurchased: boolean; onClose: () => void; onBuy: () => void;
-  viewerName?: string;
-}) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 8; // имитация страниц
-
-  const wmLabel = viewerName
-    ? `${viewerName.toUpperCase()} • NEXUS`
-    : `ГОСТЬ-${Math.abs(product.id * 7919) % 9000 + 1000} • NEXUS`;
-
-  // Генерируем уникальный контент для каждой страницы
-  const pageConfigs = [
-    { title: "Титульный лист", hasGrid: false, hasBig: true },
-    { title: "Содержание", hasGrid: false, hasBig: false },
-    { title: "Введение", hasGrid: false, hasBig: false },
-    { title: "Раздел 1", hasGrid: true, hasBig: false },
-    { title: "Раздел 2", hasGrid: true, hasBig: false },
-    { title: "Таблицы и графики", hasGrid: true, hasBig: false },
-    { title: "Выводы", hasGrid: false, hasBig: false },
-    { title: "Приложения", hasGrid: false, hasBig: false },
-  ];
-  const cfg = pageConfigs[currentPage - 1];
-
-  const wmRows = Array.from({ length: 10 });
-  const wmCols = Array.from({ length: 5 });
-
-  return (
-    <div className="fixed inset-0 flex flex-col" style={{ background: "#070b12", zIndex: 70 }}>
-
-      {/* ── Viewer Header ── */}
-      <div className="flex items-center justify-between px-5 py-3 flex-shrink-0"
-        style={{ background: "rgba(10,16,26,0.98)", borderBottom: "1px solid rgba(0,245,212,0.12)" }}>
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-all hover:bg-white/10"
-            style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-            <Icon name="ArrowLeft" size={15} style={{ color: "#e8f4ff" }} />
-          </button>
-          <span className="tag-badge flex-shrink-0"
-            style={{ background: CATEGORY_COLORS[product.category] || "rgba(0,245,212,0.15)", color: CATEGORY_TEXT[product.category] || "#00f5d4" }}>
-            {product.category}
-          </span>
-          <h3 className="font-orbitron font-bold text-sm truncate" style={{ color: "#e8f4ff" }}>{product.title}</h3>
-        </div>
-
-        {/* Page indicator */}
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg"
-            style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.15)" }}>
-            <span className="font-orbitron text-xs neon-text">{currentPage}</span>
-            <span className="text-xs" style={{ color: "rgba(180,200,220,0.35)" }}>/ {totalPages}</span>
-          </div>
-          {isPurchased ? (
-            <button className="neon-btn-solid px-4 py-1.5 rounded-lg text-xs font-orbitron font-bold flex items-center gap-1.5">
-              <Icon name="Download" size={12} />
-              Скачать
-            </button>
+  if (viewMode === "list") {
+    return (
+      <div className="flex rounded-xl overflow-hidden hover-scale transition-all"
+        style={{ background: "rgba(13,20,32,0.85)", border: "1px solid rgba(0,245,212,0.09)" }}>
+        {/* Left image */}
+        <div className="flex-shrink-0 w-24 relative" style={{ background: "rgba(0,245,212,0.04)" }}>
+          {product.preview_url ? (
+            <img src={product.preview_url} alt={product.title} className="w-full h-full object-cover" />
           ) : (
-            <button onClick={onBuy}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-orbitron font-bold transition-all"
-              style={{ background: "linear-gradient(135deg, #00f5d4, rgba(0,200,170,1))", color: "#070b12" }}>
-              <Icon name="ShoppingCart" size={12} />
-              {product.price.toLocaleString()} ₽
-            </button>
+            <div className="w-full h-full flex flex-col items-center justify-center gap-1 p-2">
+              <Icon name={catIcon} size={22} style={{ color: catText, opacity: 0.5 }} />
+              <span className="font-orbitron text-[9px] uppercase" style={{ color: catText, opacity: 0.4 }}>{product.file_format}</span>
+            </div>
+          )}
+          {isPurchased && (
+            <div className="absolute top-1.5 left-1.5 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: "rgba(0,245,212,0.9)" }}>
+              <Icon name="Check" size={9} style={{ color: "#070b12" }} />
+            </div>
           )}
         </div>
-      </div>
-
-      {/* ── Document area ── */}
-      <div className="flex-1 overflow-hidden flex" style={{ background: "rgba(5,8,14,1)" }}>
-
-        {/* Left nav */}
-        <button
-          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-          className="flex-shrink-0 w-12 flex items-center justify-center transition-all"
-          style={{ color: currentPage === 1 ? "rgba(180,200,220,0.1)" : "rgba(0,245,212,0.5)", background: "rgba(10,16,26,0.6)" }}>
-          <Icon name="ChevronLeft" size={22} />
-        </button>
-
-        {/* Page content */}
-        <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
-          <div className="relative w-full max-w-2xl animate-fade-in"
-            style={{ background: "rgba(15,22,35,1)", border: "1px solid rgba(0,245,212,0.12)", borderRadius: "12px", minHeight: "520px" }}
-            onContextMenu={e => e.preventDefault()}>
-
-            {/* Page content — never selectable */}
-            <div className="p-10" style={{ userSelect: "none", pointerEvents: "none" }}>
-
-              {/* Page number tag */}
-              <div className="flex justify-between items-center mb-8">
-                <div className="text-xs font-orbitron tracking-widest" style={{ color: "rgba(0,245,212,0.3)" }}>
-                  СТРАНИЦА {currentPage} — {cfg.title.toUpperCase()}
-                </div>
-                <div className="text-xs font-orbitron" style={{ color: "rgba(0,245,212,0.2)" }}>
-                  {product.title.slice(0, 20).toUpperCase()}
-                </div>
-              </div>
-
-              {/* Big title page */}
-              {cfg.hasBig && (
-                <div className="text-center py-12">
-                  <div className="h-8 rounded-lg mx-auto mb-6" style={{ background: "rgba(0,245,212,0.2)", width: "70%" }} />
-                  <div className="h-4 rounded mx-auto mb-3" style={{ background: "rgba(255,255,255,0.07)", width: "50%" }} />
-                  <div className="h-3 rounded mx-auto mb-2" style={{ background: "rgba(255,255,255,0.05)", width: "40%" }} />
-                  <div className="mt-10 h-24 rounded-xl mx-auto" style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.1)", width: "60%" }} />
-                  <div className="h-3 rounded mx-auto mt-8" style={{ background: "rgba(255,255,255,0.04)", width: "30%" }} />
-                </div>
-              )}
-
-              {/* Grid layout */}
-              {cfg.hasGrid && (
-                <>
-                  <div className="h-5 rounded mb-5" style={{ background: "rgba(0,245,212,0.15)", width: "45%" }} />
-                  <div className="grid grid-cols-3 gap-3 mb-6">
-                    {[1,2,3].map(i => (
-                      <div key={i} className="rounded-lg p-3 flex flex-col gap-2"
-                        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                        <div className="h-8 rounded" style={{ background: `rgba(${i===1?"0,245,212":i===2?"155,89,245":"0,200,255"},0.12)` }} />
-                        <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.06)", width: "80%" }} />
-                        <div className="h-2 rounded" style={{ background: "rgba(255,255,255,0.04)", width: "60%" }} />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    {[88, 72, 95, 65, 80, 70, 85].map((w, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="h-2 rounded flex-1" style={{ background: "rgba(255,255,255,0.055)", width: `${w}%` }} />
-                        <div className="h-2 rounded w-8" style={{ background: "rgba(0,245,212,0.1)" }} />
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Regular text page */}
-              {!cfg.hasGrid && !cfg.hasBig && (
-                <>
-                  <div className="h-5 rounded mb-6" style={{ background: "rgba(0,245,212,0.15)", width: "40%" }} />
-                  <div className="space-y-3 mb-6">
-                    {[92, 78, 88, 95, 70, 85, 60, 88, 75, 90].map((w, i) => (
-                      <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.06)", width: `${w}%` }} />
-                    ))}
-                  </div>
-                  <div className="h-4 rounded mb-4 mt-6" style={{ background: "rgba(155,89,245,0.12)", width: "35%" }} />
-                  <div className="space-y-2.5">
-                    {[85, 65, 92, 78, 70].map((w, i) => (
-                      <div key={i} className="h-2.5 rounded" style={{ background: "rgba(255,255,255,0.05)", width: `${w}%` }} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* ── ПЕРСОНАЛЬНЫЕ ВОДЯНЫЕ ЗНАКИ — всегда поверх ── */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl" style={{ userSelect: "none" }}>
-              {wmRows.map((_, row) =>
-                wmCols.map((_, col) => (
-                  <div key={`${row}-${col}`}
-                    className="absolute font-orbitron font-bold whitespace-nowrap"
-                    style={{
-                      top: `${row * 11 + 2}%`,
-                      left: `${col * 28 - 8 + (row % 2) * 14}%`,
-                      fontSize: "9px",
-                      color: "rgba(0,245,212,0.14)",
-                      transform: "rotate(-30deg)",
-                      letterSpacing: "0.12em",
-                    }}>
-                    {wmLabel}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* ── CTA overlay — только если не куплено (нижняя треть) ── */}
-            {!isPurchased && (
-              <div className="absolute bottom-0 left-0 right-0 rounded-b-xl flex flex-col items-center justify-end pb-8"
-                style={{ height: "42%", background: "linear-gradient(to bottom, transparent 0%, rgba(5,8,14,0.98) 50%)" }}>
-                <div className="text-center px-6">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Icon name="ShoppingCart" size={14} style={{ color: "#00f5d4" }} />
-                    <span className="font-orbitron font-bold text-sm" style={{ color: "#e8f4ff" }}>Купи — скачай без водяных знаков</span>
-                  </div>
-                  <p className="text-xs mb-4" style={{ color: "rgba(180,200,220,0.45)" }}>Просматривай бесплатно, скачивай после оплаты</p>
-                  <button onClick={onBuy} className="neon-btn-solid px-8 py-3 rounded-xl font-orbitron font-bold text-sm tracking-wide">
-                    КУПИТЬ {product.price.toLocaleString()} ₽ →
-                  </button>
-                </div>
-              </div>
-            )}
+        {/* Middle info */}
+        <div className="flex-1 px-4 py-3 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="tag-badge" style={{ background: catColor, color: catText }}>{product.category}</span>
+          </div>
+          <h3 className="font-semibold text-sm truncate mb-0.5" style={{ color: "#e8f4ff" }}>{product.title}</h3>
+          <p className="text-xs truncate mb-1.5" style={{ color: "rgba(180,200,220,0.4)" }}>{product.description}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>{product.author}</span>
+            <span className="w-px h-3" style={{ background: "rgba(255,255,255,0.1)" }} />
+            <StarRating value={Math.round(product.rating)} size={10} />
+            <span className="text-xs font-orbitron" style={{ color: "#f5b400" }}>{product.rating.toFixed(1)}</span>
+            <span className="text-xs" style={{ color: "rgba(180,200,220,0.3)" }}>{product.sales_count} продаж</span>
           </div>
         </div>
+        {/* Right: price + actions */}
+        <div className="flex-shrink-0 flex flex-col items-end justify-between p-3 gap-2">
+          <div className="font-orbitron font-black text-lg neon-text">{product.price.toLocaleString()} ₽</div>
+          <div className="flex flex-col gap-1.5">
+            <button onClick={() => onPreview(product)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all neon-btn">
+              <Icon name="Eye" size={11} />Предпросмотр
+            </button>
+            <button onClick={() => onOpen(product)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold neon-btn-solid">
+              <Icon name="Info" size={11} />Подробнее
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-        {/* Right nav */}
-        <button
-          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages}
-          className="flex-shrink-0 w-12 flex items-center justify-center transition-all"
-          style={{ color: currentPage === totalPages ? "rgba(180,200,220,0.1)" : "rgba(0,245,212,0.5)", background: "rgba(10,16,26,0.6)" }}>
-          <Icon name="ChevronRight" size={22} />
+  // Grid mode
+  return (
+    <div className="rounded-2xl overflow-hidden hover-scale transition-all flex flex-col"
+      style={{ background: "rgba(13,20,32,0.85)", border: "1px solid rgba(0,245,212,0.09)" }}>
+      {/* Image */}
+      <div className="relative" style={{ paddingTop: "66%", background: "rgba(0,245,212,0.03)" }}>
+        <div className="absolute inset-0">
+          {product.preview_url ? (
+            <img src={product.preview_url} alt={product.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+              <Icon name={catIcon} size={36} style={{ color: catText, opacity: 0.35 }} />
+              <span className="font-orbitron text-xs uppercase" style={{ color: catText, opacity: 0.3 }}>{product.file_format || "FILE"}</span>
+            </div>
+          )}
+        </div>
+        {/* Favorite */}
+        <button onClick={() => onFavorite(product.id)}
+          className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full flex items-center justify-center transition-all"
+          style={{ background: "rgba(7,11,18,0.7)", backdropFilter: "blur(6px)" }}>
+          <Icon name="Heart" size={13} style={{ color: isFavorite ? "#f500c8" : "rgba(255,255,255,0.4)", fill: isFavorite ? "#f500c8" : "transparent" }} />
+        </button>
+        {isPurchased && (
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ background: "rgba(0,245,212,0.9)" }}>
+            <Icon name="Check" size={9} style={{ color: "#070b12" }} />
+            <span className="text-[9px] font-orbitron font-bold" style={{ color: "#070b12" }}>КУПЛЕНО</span>
+          </div>
+        )}
+      </div>
+      {/* Info */}
+      <div className="p-4 flex-1 flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <span className="tag-badge" style={{ background: catColor, color: catText }}>{product.category}</span>
+          <div className="flex items-center gap-1">
+            <Icon name="Star" size={10} style={{ color: "#f5b400", fill: "#f5b400" }} />
+            <span className="text-xs font-orbitron" style={{ color: "#f5b400" }}>{product.rating.toFixed(1)}</span>
+          </div>
+        </div>
+        <h3 className="font-semibold text-sm leading-snug mb-1 line-clamp-2" style={{ color: "#e8f4ff" }}>{product.title}</h3>
+        <p className="text-xs mb-3" style={{ color: "rgba(180,200,220,0.4)" }}>{product.author} · {product.sales_count} продаж</p>
+        <div className="flex items-center justify-between mt-auto pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+          <span className="font-orbitron font-black text-lg neon-text">{product.price.toLocaleString()} ₽</span>
+          <div className="flex gap-1.5">
+            <button onClick={() => onPreview(product)} title="Предпросмотр"
+              className="w-7 h-7 rounded-lg flex items-center justify-center neon-btn transition-all">
+              <Icon name="Eye" size={13} />
+            </button>
+            <button onClick={() => onOpen(product)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold neon-btn-solid">
+              <Icon name="Info" size={11} />Подробнее
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── UploadPage ──
+function UploadPage({ user, token, onAuthRequired, onSuccess }: {
+  user: User | null; token: string | null; onAuthRequired: () => void; onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("Документы");
+  const [price, setPrice] = useState("");
+  const [fileUrl, setFileUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [fileFormat, setFileFormat] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadingPreview, setUploadingPreview] = useState(false);
+  const [previewThumb, setPreviewThumb] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const fileRef = useRef<HTMLInputElement>(null);
+  const previewRef = useRef<HTMLInputElement>(null);
+
+  if (!user || !token) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+        <Icon name="Upload" size={48} className="mb-4" style={{ color: "rgba(0,245,212,0.2)" }} />
+        <p className="font-orbitron text-lg mb-4" style={{ color: "rgba(180,200,220,0.5)" }}>Войди чтобы загружать файлы</p>
+        <button onClick={onAuthRequired} className="neon-btn-solid px-6 py-2.5 rounded-xl font-orbitron font-bold text-sm">Войти</button>
+      </div>
+    );
+  }
+
+  const readAsBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => { const r = reader.result as string; resolve(r.split(",")[1]); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError("");
+    try {
+      const b64 = await readAsBase64(file);
+      const res = await apiFetch(`${API_PRODUCTS}/upload`, {
+        method: "POST",
+        body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type, upload_type: "file" }),
+      }, token);
+      if (res.error) { setError(res.error); return; }
+      setFileUrl(res.url || "");
+      setFileName(file.name);
+      setFileFormat(res.format || file.name.split(".").pop() || "");
+    } catch {
+      setError("Ошибка загрузки файла");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handlePreviewSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPreview(true);
+    setError("");
+    try {
+      const b64 = await readAsBase64(file);
+      const res = await apiFetch(`${API_PRODUCTS}/upload`, {
+        method: "POST",
+        body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type, upload_type: "preview" }),
+      }, token);
+      if (res.error) { setError(res.error); return; }
+      setPreviewUrl(res.url || "");
+      setPreviewThumb(res.url || "");
+    } catch {
+      setError("Ошибка загрузки превью");
+    } finally {
+      setUploadingPreview(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !category || !price || parseInt(price) <= 0) { setError("Заполни все обязательные поля"); return; }
+    if (!fileUrl) { setError("Загрузи файл"); return; }
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await apiFetch(`${API_PRODUCTS}/`, {
+        method: "POST",
+        body: JSON.stringify({ title, description, category, price: parseInt(price), file_url: fileUrl, preview_url: previewUrl, file_name: fileName, file_format: fileFormat }),
+      }, token);
+      if (res.error) { setError(res.error); return; }
+      onSuccess();
+    } catch {
+      setError("Ошибка создания продукта");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-10 animate-fade-in">
+      <h1 className="font-orbitron font-bold text-2xl mb-8" style={{ color: "#e8f4ff" }}>Загрузить продукт</h1>
+      <div className="space-y-5">
+        {/* Title */}
+        <div>
+          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>НАЗВАНИЕ *</label>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Название продукта"
+            className="w-full px-4 py-3 rounded-xl outline-none text-sm"
+            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
+        </div>
+        {/* Category + Price */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>КАТЕГОРИЯ *</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm"
+              style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }}>
+              {CATEGORIES.filter((c) => c !== "Все").map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ЦЕНА ₽ *</label>
+            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="990" type="number" min="1"
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm"
+              style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
+          </div>
+        </div>
+        {/* Description */}
+        <div>
+          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ОПИСАНИЕ</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опиши свой продукт..." rows={4}
+            className="w-full px-4 py-3 rounded-xl outline-none resize-none text-sm"
+            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
+        </div>
+        {/* File upload */}
+        <div>
+          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ФАЙЛ ПРОДУКТА *</label>
+          <input ref={fileRef} type="file" className="hidden"
+            accept=".pdf,.pptx,.docx,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.zip"
+            onChange={handleFileSelect} />
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="w-full rounded-xl py-8 flex flex-col items-center justify-center gap-3 transition-all"
+            style={{ border: `2px dashed ${fileUrl ? "rgba(0,245,212,0.4)" : "rgba(0,245,212,0.15)"}`, background: fileUrl ? "rgba(0,245,212,0.04)" : "rgba(13,20,32,0.5)", color: "#e8f4ff" }}>
+            {uploading ? (
+              <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,245,212,0.3)", borderTopColor: "#00f5d4" }} />
+            ) : fileUrl ? (
+              <>
+                <Icon name="CheckCircle" size={28} style={{ color: "#00f5d4" }} />
+                <div className="text-center">
+                  <p className="text-sm font-semibold neon-text">{fileName}</p>
+                  <p className="text-xs uppercase font-orbitron mt-0.5" style={{ color: "rgba(0,245,212,0.5)" }}>{fileFormat}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Icon name="Upload" size={28} style={{ color: "rgba(0,245,212,0.3)" }} />
+                <div className="text-center">
+                  <p className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>Нажми для выбора файла</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.3)" }}>PDF, PPTX, DOCX, XLSX, ZIP, изображения · до 100 МБ</p>
+                </div>
+              </>
+            )}
+          </button>
+        </div>
+        {/* Preview upload */}
+        <div>
+          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#9b59f5" }}>ПРЕВЬЮ-ИЗОБРАЖЕНИЕ <span style={{ color: "rgba(180,200,220,0.35)", fontSize: 9 }}>НЕОБЯЗАТЕЛЬНО</span></label>
+          <input ref={previewRef} type="file" accept="image/*" className="hidden" onChange={handlePreviewSelect} />
+          <button type="button" onClick={() => previewRef.current?.click()}
+            className="w-full rounded-xl py-5 flex flex-col items-center justify-center gap-2 transition-all"
+            style={{ border: `2px dashed ${previewUrl ? "rgba(155,89,245,0.4)" : "rgba(155,89,245,0.12)"}`, background: previewUrl ? "rgba(155,89,245,0.04)" : "rgba(13,20,32,0.5)" }}>
+            {uploadingPreview ? (
+              <div className="w-6 h-6 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(155,89,245,0.3)", borderTopColor: "#9b59f5" }} />
+            ) : previewThumb ? (
+              <div className="flex items-center gap-4">
+                <img src={previewThumb} alt="preview" className="w-16 h-16 rounded-lg object-cover" />
+                <div className="text-left">
+                  <p className="text-sm font-semibold" style={{ color: "#9b59f5" }}>Превью загружено</p>
+                  <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Нажми чтобы заменить</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Icon name="Image" size={22} style={{ color: "rgba(155,89,245,0.35)" }} />
+                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Загрузить изображение</p>
+              </>
+            )}
+          </button>
+          <p className="text-xs mt-1.5" style={{ color: "rgba(180,200,220,0.3)" }}>Необязательно — без превью используется первая страница файла</p>
+        </div>
+        {error && <p className="text-sm px-3 py-2 rounded-lg" style={{ color: "#f55050", background: "rgba(245,80,80,0.08)", border: "1px solid rgba(245,80,80,0.15)" }}>{error}</p>}
+        <button onClick={handleSubmit} disabled={submitting || uploading}
+          className="w-full neon-btn-solid py-3.5 rounded-xl font-orbitron font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          {submitting ? "Публикация..." : "Опубликовать продукт →"}
         </button>
       </div>
+    </div>
+  );
+}
 
-      {/* ── Footer: page dots + watermark info ── */}
-      <div className="flex-shrink-0 flex items-center justify-between px-5 py-2.5"
-        style={{ background: "rgba(10,16,26,0.98)", borderTop: "1px solid rgba(0,245,212,0.08)" }}>
-        {/* Page dots */}
-        <div className="flex items-center gap-1.5">
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button key={i} onClick={() => setCurrentPage(i + 1)}
-              className="transition-all rounded-full"
-              style={{
-                width: currentPage === i + 1 ? "20px" : "6px",
-                height: "6px",
-                background: currentPage === i + 1 ? "#00f5d4" : "rgba(0,245,212,0.2)",
-              }} />
+// ── ProfilePage ──
+function ProfilePage({ user, token, onLogout, onUpdateBalance, onOpenFile }: {
+  user: User; token: string; onLogout: () => void; onUpdateBalance: (b: number) => void; onOpenFile: (p: Product) => void;
+}) {
+  const [purchases, setPurchases] = useState<PurchasedItem[]>([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [reviewedIds, setReviewedIds] = useState<number[]>([]);
+  const [reviewingId, setReviewingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setLoadingPurchases(true);
+    apiFetch(`${API_PURCHASES}/`, {}, token)
+      .then((data) => { if (Array.isArray(data)) setPurchases(data); })
+      .catch(() => {})
+      .finally(() => setLoadingPurchases(false));
+  }, [token]);
+
+  const initials = user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-10 animate-fade-in">
+      {/* User card */}
+      <div className="rounded-2xl p-6 mb-6 flex flex-wrap items-center gap-5"
+        style={{ background: "rgba(13,20,32,0.85)", border: "1px solid rgba(0,245,212,0.12)" }}>
+        <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-orbitron font-black text-2xl flex-shrink-0"
+          style={{ background: "linear-gradient(135deg,#00f5d4,#9b59f5)", color: "#070b12" }}>
+          {initials}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-orbitron font-bold text-xl truncate" style={{ color: "#e8f4ff" }}>{user.name}</h2>
+          <p className="text-sm truncate" style={{ color: "rgba(180,200,220,0.45)" }}>{user.email}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="rounded-xl px-5 py-3 text-center" style={{ background: "rgba(0,245,212,0.07)", border: "1px solid rgba(0,245,212,0.15)" }}>
+            <div className="font-orbitron font-black text-xl neon-text">{user.purchased.length}</div>
+            <div className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>покупок</div>
+          </div>
+          <div className="rounded-xl px-5 py-3 text-center" style={{ background: "rgba(155,89,245,0.07)", border: "1px solid rgba(155,89,245,0.15)" }}>
+            <div className="font-orbitron font-black text-xl" style={{ color: "#9b59f5" }}>{user.balance.toLocaleString()} ₽</div>
+            <div className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>баланс</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Balance + withdraw */}
+      {user.balance > 0 && (
+        <div className="rounded-2xl p-5 mb-6 flex items-center justify-between"
+          style={{ background: "rgba(155,89,245,0.06)", border: "1px solid rgba(155,89,245,0.15)" }}>
+          <div>
+            <p className="font-orbitron font-bold text-lg" style={{ color: "#9b59f5" }}>{user.balance.toLocaleString()} ₽ на балансе</p>
+            <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.4)" }}>Комиссия вывода 10%</p>
+          </div>
+          <button onClick={() => setShowWithdraw(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-orbitron font-bold text-sm transition-all"
+            style={{ background: "rgba(155,89,245,0.15)", border: "1px solid rgba(155,89,245,0.3)", color: "#9b59f5" }}>
+            <Icon name="ArrowDownToLine" size={14} />Вывести
+          </button>
+        </div>
+      )}
+
+      {/* Purchases */}
+      <h3 className="font-orbitron font-bold text-base mb-4" style={{ color: "#e8f4ff" }}>Мои покупки</h3>
+      {loadingPurchases ? (
+        <div className="flex justify-center py-10">
+          <div className="w-8 h-8 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,245,212,0.2)", borderTopColor: "#00f5d4" }} />
+        </div>
+      ) : purchases.length === 0 ? (
+        <div className="text-center py-12 rounded-2xl" style={{ background: "rgba(13,20,32,0.6)", border: "1px solid rgba(255,255,255,0.05)" }}>
+          <Icon name="ShoppingBag" size={36} className="mx-auto mb-3" style={{ color: "rgba(0,245,212,0.15)" }} />
+          <p className="text-sm" style={{ color: "rgba(180,200,220,0.35)" }}>Ты ещё ничего не купил</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {purchases.map((item) => (
+            <div key={item.id} className="rounded-xl overflow-hidden flex" style={{ background: "rgba(13,20,32,0.85)", border: "1px solid rgba(0,245,212,0.08)" }}>
+              <div className="w-20 flex-shrink-0" style={{ background: "rgba(0,245,212,0.04)" }}>
+                {item.preview_url ? (
+                  <img src={item.preview_url} alt={item.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Icon name={CATEGORY_ICONS[item.category] || "File"} size={22} style={{ color: CATEGORY_TEXT[item.category] || "#00f5d4", opacity: 0.35 }} />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 px-4 py-3 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="tag-badge" style={{ background: CATEGORY_COLORS[item.category] || "rgba(0,245,212,0.1)", color: CATEGORY_TEXT[item.category] || "#00f5d4" }}>{item.category}</span>
+                </div>
+                <h4 className="font-semibold text-sm truncate" style={{ color: "#e8f4ff" }}>{item.title}</h4>
+                <p className="text-xs" style={{ color: "rgba(180,200,220,0.35)" }}>{item.price?.toLocaleString()} ₽ · {item.purchased_at?.slice(0,10)}</p>
+              </div>
+              <div className="flex flex-col gap-1.5 p-3 justify-center flex-shrink-0">
+                <button onClick={() => onOpenFile(item as Product)}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold neon-btn-solid">
+                  <Icon name="Eye" size={11} />Открыть
+                </button>
+                {!reviewedIds.includes(item.id) && (
+                  reviewingId === item.id ? (
+                    <div className="p-2 rounded-xl" style={{ background: "rgba(0,245,212,0.04)", border: "1px solid rgba(0,245,212,0.12)" }}>
+                      <ReviewForm productId={item.id} token={token} onSuccess={() => { setReviewedIds((p) => [...p, item.id]); setReviewingId(null); }} />
+                    </div>
+                  ) : (
+                    <button onClick={() => setReviewingId(item.id)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs neon-btn">
+                      <Icon name="Star" size={11} />Отзыв
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
           ))}
         </div>
-        <div className="flex items-center gap-1.5">
-          <Icon name="ShieldCheck" size={12} style={{ color: "rgba(0,245,212,0.4)" }} />
-          <span className="text-xs font-orbitron" style={{ color: "rgba(0,245,212,0.35)", fontSize: "9px" }}>
-            {wmLabel}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
+      )}
 
-// ── AUTH MODAL ──
-function AuthModal({ mode, onLogin, onRegister, onClose, onSwitch }: {
-  mode: "login" | "register";
-  onLogin: (email: string, password: string) => void;
-  onRegister: (name: string, email: string, password: string) => void;
-  onClose: () => void;
-  onSwitch: (m: "login" | "register") => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPass, setShowPass] = useState(false);
-
-  const inputStyle = {
-    background: "rgba(13,20,32,0.9)",
-    border: "1px solid rgba(0,245,212,0.2)",
-    color: "#e8f4ff",
-    fontFamily: "'Golos Text', sans-serif",
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(7,11,18,0.9)", backdropFilter: "blur(16px)" }}
-      onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden animate-slide-up"
-        style={{ background: "rgba(10,16,26,0.99)", border: "1px solid rgba(0,245,212,0.18)" }}
-        onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div className="relative px-8 pt-8 pb-6 text-center"
-          style={{ borderBottom: "1px solid rgba(0,245,212,0.08)" }}>
-          <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl"
-            style={{ background: "linear-gradient(90deg, #00f5d4, #9b59f5, #f500c8)" }} />
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ background: "linear-gradient(135deg, rgba(0,245,212,0.15), rgba(155,89,245,0.15))", border: "1px solid rgba(0,245,212,0.25)" }}>
-            <Icon name={mode === "login" ? "LogIn" : "UserPlus"} size={24} style={{ color: "#00f5d4" }} />
-          </div>
-          <h2 className="font-orbitron font-bold text-xl" style={{ color: "#e8f4ff" }}>
-            {mode === "login" ? "ВХОД В АККАУНТ" : "РЕГИСТРАЦИЯ"}
-          </h2>
-          <p className="text-sm mt-1" style={{ color: "rgba(180,200,220,0.45)" }}>
-            {mode === "login" ? "Введи email и пароль для входа" : "Создай аккаунт продавца или покупателя"}
-          </p>
-          <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <Icon name="X" size={14} style={{ color: "rgba(180,200,220,0.5)" }} />
-          </button>
-        </div>
-
-        <div className="px-8 py-6 space-y-4">
-          {mode === "register" && (
-            <div>
-              <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ИМЯ</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Твоё имя"
-                className="w-full px-4 py-3 rounded-xl outline-none" style={inputStyle} />
-            </div>
-          )}
-          <div>
-            <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>EMAIL</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@mail.com"
-              className="w-full px-4 py-3 rounded-xl outline-none" style={inputStyle} />
-          </div>
-          <div>
-            <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ПАРОЛЬ</label>
-            <div className="relative">
-              <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="Минимум 6 символов"
-                className="w-full px-4 py-3 pr-12 rounded-xl outline-none" style={inputStyle} />
-              <button onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2">
-                <Icon name={showPass ? "EyeOff" : "Eye"} size={16} style={{ color: "rgba(0,245,212,0.5)" }} />
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={() => mode === "login" ? onLogin(email, password) : onRegister(name, email, password)}
-            className="w-full neon-btn-solid py-4 rounded-xl font-orbitron font-bold text-sm tracking-wider mt-2">
-            {mode === "login" ? "ВОЙТИ →" : "СОЗДАТЬ АККАУНТ →"}
-          </button>
-
-          <div className="text-center pt-2">
-            <span className="text-sm" style={{ color: "rgba(180,200,220,0.4)" }}>
-              {mode === "login" ? "Нет аккаунта? " : "Уже есть аккаунт? "}
-            </span>
-            <button onClick={() => onSwitch(mode === "login" ? "register" : "login")}
-              className="text-sm font-semibold" style={{ color: "#00f5d4" }}>
-              {mode === "login" ? "Зарегистрироваться" : "Войти"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── REVIEWS SECTION ──
-function ReviewsSection({ productId, reviews }: { productId: number; reviews: Review[] }) {
-  const productReviews = reviews.filter(r => r.productId === productId);
-  if (!productReviews.length) return (
-    <div className="pt-4" style={{ borderTop: "1px solid rgba(0,245,212,0.08)" }}>
-      <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(180,200,220,0.35)" }}>ОТЗЫВЫ</p>
-      <p className="text-sm text-center py-4" style={{ color: "rgba(180,200,220,0.3)" }}>Отзывов пока нет</p>
-    </div>
-  );
-  return (
-    <div className="pt-4" style={{ borderTop: "1px solid rgba(0,245,212,0.08)" }}>
-      <p className="text-xs font-orbitron tracking-widest mb-4" style={{ color: "rgba(180,200,220,0.35)" }}>
-        ОТЗЫВЫ ({productReviews.length})
-      </p>
-      <div className="space-y-3">
-        {productReviews.slice(0, 3).map(r => (
-          <div key={r.id} className="rounded-xl p-3" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-sm font-semibold" style={{ color: "#e8f4ff" }}>{r.userName}</span>
-              <div className="flex items-center gap-1">
-                {[1,2,3,4,5].map(s => (
-                  <Icon key={s} name="Star" size={11} style={{ color: s <= r.rating ? "#f5c842" : "rgba(180,200,220,0.2)" }} />
-                ))}
-              </div>
-            </div>
-            <p className="text-xs" style={{ color: "rgba(180,200,220,0.55)", lineHeight: 1.5 }}>{r.text}</p>
-            <p className="text-xs mt-1" style={{ color: "rgba(180,200,220,0.25)" }}>{r.date}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── REVIEW MODAL ──
-function ReviewModal({ product, userName, onSubmit, onClose }: {
-  product: Product; userName: string;
-  onSubmit: (rating: number, text: string) => void;
-  onClose: () => void;
-}) {
-  const [rating, setRating] = useState(0);
-  const [hover, setHover] = useState(0);
-  const [text, setText] = useState("");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(7,11,18,0.9)", backdropFilter: "blur(16px)" }}
-      onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden animate-slide-up"
-        style={{ background: "rgba(10,16,26,0.99)", border: "1px solid rgba(245,197,0,0.2)" }}
-        onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 flex items-center justify-between"
-          style={{ borderBottom: "1px solid rgba(245,197,0,0.1)" }}>
-          <div>
-            <h3 className="font-orbitron font-bold text-base" style={{ color: "#e8f4ff" }}>ОСТАВИТЬ ОТЗЫВ</h3>
-            <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.4)" }}>{product.title}</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <Icon name="X" size={14} style={{ color: "rgba(180,200,220,0.5)" }} />
-          </button>
-        </div>
-        <div className="px-6 py-5 space-y-5">
-          <div>
-            <p className="text-xs font-orbitron tracking-widest mb-3" style={{ color: "rgba(245,197,0,0.7)" }}>РЕЙТИНГ</p>
-            <div className="flex gap-2">
-              {[1,2,3,4,5].map(s => (
-                <button key={s} onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(0)} onClick={() => setRating(s)}
-                  className="transition-all" style={{ transform: (hover || rating) >= s ? "scale(1.2)" : "scale(1)" }}>
-                  <Icon name="Star" size={32} style={{ color: (hover || rating) >= s ? "#f5c842" : "rgba(180,200,220,0.2)" }} />
-                </button>
-              ))}
-              {rating > 0 && <span className="ml-2 text-sm self-center font-orbitron" style={{ color: "#f5c842" }}>{rating}/5</span>}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs font-orbitron tracking-widest mb-2 block" style={{ color: "rgba(245,197,0,0.7)" }}>ВАШ ОТЗЫВ</label>
-            <textarea rows={4} value={text} onChange={e => setText(e.target.value)}
-              placeholder="Расскажи о своём опыте использования..."
-              className="w-full px-4 py-3 rounded-xl outline-none resize-none"
-              style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(245,197,0,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-          </div>
-          <div className="flex gap-3">
-            <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-medium transition-all"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(180,200,220,0.5)" }}>
-              Отмена
-            </button>
-            <button
-              onClick={() => rating > 0 && text.trim() && onSubmit(rating, text)}
-              disabled={!rating || !text.trim()}
-              className="flex-1 py-3 rounded-xl font-orbitron font-bold text-sm transition-all"
-              style={{
-                background: rating && text.trim() ? "linear-gradient(135deg, #f5c500, #f5a000)" : "rgba(245,197,0,0.08)",
-                color: rating && text.trim() ? "#070b12" : "rgba(245,197,0,0.3)",
-                border: "none",
-              }}>
-              ОПУБЛИКОВАТЬ
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── UPLOAD PAGE ──
-function UploadPage({ categories, user, onAuthRequired }: {
-  categories: string[]; user: { name: string } | null; onAuthRequired: () => void;
-}) {
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [previewName, setPreviewName] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const previewInputRef = useRef<HTMLInputElement>(null);
-
-  return (
-    <div className="px-6 py-8 max-w-2xl mx-auto animate-fade-in">
-      <h1 className="font-orbitron font-bold text-2xl mb-2" style={{ color: "#e8f4ff" }}>ЗАГРУЗИТЬ ТОВАР <span className="neon-text">_</span></h1>
-      <p className="mb-8" style={{ color: "rgba(180,200,220,0.45)" }}>Заполни информацию о своём цифровом продукте</p>
-      <div className="space-y-5">
-        <UploadField label="НАЗВАНИЕ" placeholder="Например: Бизнес-план для стартапа 2025" />
-        <div>
-          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>КАТЕГОРИЯ</label>
-          <select className="w-full px-4 py-3 rounded-xl outline-none"
-            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }}>
-            <option value="">Выбери категорию</option>
-            {categories.slice(1).map(c => <option key={c}>{c}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ОПИСАНИЕ</label>
-          <textarea rows={4} placeholder="Опиши продукт: что внутри, кому подойдёт, в чём уникальность"
-            className="w-full px-4 py-3 rounded-xl outline-none resize-none"
-            style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-        </div>
-        <PriceField />
-
-        {/* ── FILE INPUT ── */}
-        <div>
-          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ФАЙЛ</label>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.pptx,.ppt,.docx,.doc,.xlsx,.xls,.zip,.rar"
-            className="hidden"
-            onChange={e => setFileName(e.target.files?.[0]?.name || null)}
-          />
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-xl p-8 text-center cursor-pointer transition-all hover-scale"
-            style={{
-              background: fileName ? "rgba(0,245,212,0.05)" : "rgba(13,20,32,0.8)",
-              border: fileName ? "2px dashed rgba(0,245,212,0.5)" : "2px dashed rgba(0,245,212,0.2)",
-            }}>
-            <Icon name={fileName ? "FileCheck" : "UploadCloud"} size={36}
-              style={{ color: "#00f5d4", margin: "0 auto 12px" }} />
-            {fileName ? (
-              <>
-                <p className="font-medium mb-1 truncate max-w-xs mx-auto" style={{ color: "#00f5d4" }}>{fileName}</p>
-                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Нажми чтобы заменить</p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium mb-1" style={{ color: "#e8f4ff" }}>Нажми для выбора файла</p>
-                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>PDF, PPTX, DOCX, XLSX, ZIP до 100 МБ</p>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── PREVIEW IMAGE INPUT ── */}
-        <div>
-          <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#9b59f5" }}>ПРЕВЬЮ-ИЗОБРАЖЕНИЕ</label>
-          <input
-            ref={previewInputRef}
-            type="file"
-            accept=".png,.jpg,.jpeg,.webp"
-            className="hidden"
-            onChange={e => setPreviewName(e.target.files?.[0]?.name || null)}
-          />
-          <div
-            onClick={() => previewInputRef.current?.click()}
-            className="rounded-xl p-6 text-center cursor-pointer transition-all hover-scale"
-            style={{
-              background: previewName ? "rgba(155,89,245,0.05)" : "rgba(13,20,32,0.8)",
-              border: previewName ? "2px dashed rgba(155,89,245,0.5)" : "2px dashed rgba(155,89,245,0.2)",
-            }}>
-            <Icon name={previewName ? "ImageCheck" : "Image"} fallback="Image" size={28}
-              style={{ color: "#9b59f5", margin: "0 auto 10px" }} />
-            {previewName ? (
-              <>
-                <p className="text-sm truncate max-w-xs mx-auto" style={{ color: "#9b59f5" }}>{previewName}</p>
-                <p className="text-xs mt-1" style={{ color: "rgba(180,200,220,0.35)" }}>Нажми чтобы заменить</p>
-              </>
-            ) : (
-              <p className="text-sm" style={{ color: "rgba(180,200,220,0.45)" }}>Нажми для выбора изображения (PNG, JPG до 5 МБ)</p>
-            )}
-          </div>
-        </div>
-
-        <button
-          onClick={() => { if (!user) onAuthRequired(); }}
-          className="w-full neon-btn-solid py-4 rounded-xl font-orbitron font-bold text-sm tracking-wider">
-          ОПУБЛИКОВАТЬ ТОВАР
+      {/* Logout */}
+      <div className="mt-8">
+        <button onClick={onLogout} className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm transition-all"
+          style={{ background: "rgba(245,80,80,0.07)", border: "1px solid rgba(245,80,80,0.15)", color: "#f55050" }}>
+          <Icon name="LogOut" size={14} />Выйти
         </button>
       </div>
-    </div>
-  );
-}
 
-// ── HELPERS ──
-function UploadField({ label, placeholder, type = "text" }: { label: string; placeholder: string; type?: string }) {
-  return (
-    <div>
-      <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>{label}</label>
-      <input type={type} placeholder={placeholder} className="w-full px-4 py-3 rounded-xl outline-none"
-        style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.2)", color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-    </div>
-  );
-}
-
-function PriceField() {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState("");
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    if (v === "" || /^\d+$/.test(v)) { setValue(v); setError(""); }
-    else setError("Цена не может быть отрицательной");
-  };
-  return (
-    <div>
-      <label className="text-xs font-semibold mb-2 block font-orbitron tracking-widest" style={{ color: "#00f5d4" }}>ЦЕНА (₽)</label>
-      <input type="number" min="0" value={value} onChange={handleChange} placeholder="990"
-        className="w-full px-4 py-3 rounded-xl outline-none"
-        style={{ background: "rgba(13,20,32,0.9)", border: `1px solid ${error ? "rgba(245,80,80,0.5)" : "rgba(0,245,212,0.2)"}`, color: "#e8f4ff", fontFamily: "'Golos Text', sans-serif" }} />
-      {error && <p className="text-xs mt-1" style={{ color: "#f55050" }}>{error}</p>}
+      {/* Withdraw modal */}
+      {showWithdraw && (
+        <WithdrawModal
+          user={user}
+          token={token}
+          onClose={() => setShowWithdraw(false)}
+          onSuccess={(newBalance) => { onUpdateBalance(newBalance); setShowWithdraw(false); }}
+        />
+      )}
     </div>
   );
 }
