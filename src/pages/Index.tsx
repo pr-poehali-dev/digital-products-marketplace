@@ -80,18 +80,20 @@ export default function Index() {
   const handleLogin = async (email: string, password: string) => {
     const res = await apiFetch(`${API_AUTH}/login`, { method: "POST", body: JSON.stringify({ email, password }) });
     if (res.error) throw new Error(res.error);
+    if (!res.token) throw new Error("Сервер не вернул токен");
     localStorage.setItem("nexus_token", res.token);
     setToken(res.token);
-    setUser(res.user);
+    setUser({ ...res.user, purchased: res.user.purchased || [] });
     setAuthModal(null);
   };
 
   const handleRegister = async (name: string, email: string, password: string) => {
     const res = await apiFetch(`${API_AUTH}/register`, { method: "POST", body: JSON.stringify({ name, email, password }) });
     if (res.error) throw new Error(res.error);
+    if (!res.token) throw new Error("Сервер не вернул токен");
     localStorage.setItem("nexus_token", res.token);
     setToken(res.token);
-    setUser(res.user);
+    setUser({ ...res.user, purchased: [] });
     setAuthModal(null);
   };
 
@@ -662,6 +664,13 @@ function ProductCard({ product, viewMode, isFavorite, isPurchased, onFavorite, o
 }
 
 // ── UploadPage ──
+const CONTENT_TYPES = [
+  { id: "file",  label: "Файл",        icon: "Upload",   hint: "PDF, DOCX, PPTX, XLSX, ZIP, RAR, PSD, AI, MP4, MP3, любой файл до 100 МБ" },
+  { id: "image", label: "Фото/Арт",    icon: "Image",    hint: "JPG, PNG, GIF, WEBP, SVG — готовые изображения, арт, фото" },
+  { id: "link",  label: "Ссылка",      icon: "Link",     hint: "Ссылка на Google Drive, Figma, Notion, репозиторий и т.д." },
+  { id: "bot",   label: "Бот/Сервис",  icon: "Bot",      hint: "Telegram-бот, API-ключ, доступ к сервису — покупатель получит ссылку/ключ" },
+];
+
 function UploadPage({ user, token, onAuthRequired, onSuccess }: {
   user: User | null; token: string | null; onAuthRequired: () => void; onSuccess: () => void;
 }) {
@@ -669,7 +678,9 @@ function UploadPage({ user, token, onAuthRequired, onSuccess }: {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("Документы");
   const [price, setPrice] = useState("");
+  const [contentType, setContentType] = useState("file");
   const [fileUrl, setFileUrl] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [fileFormat, setFileFormat] = useState("");
@@ -702,69 +713,72 @@ function UploadPage({ user, token, onAuthRequired, onSuccess }: {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    setError("");
-    try {
-      const b64 = await readAsBase64(file);
-      const res = await apiFetch(`${API_PRODUCTS}/upload`, {
-        method: "POST",
-        body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type, upload_type: "file" }),
-      }, token);
-      if (res.error) { setError(res.error); return; }
-      setFileUrl(res.url || "");
-      setFileName(file.name);
-      setFileFormat(res.format || file.name.split(".").pop() || "");
-    } catch {
-      setError("Ошибка загрузки файла");
-    } finally {
-      setUploading(false);
-    }
+    setUploading(true); setError("");
+    const b64 = await readAsBase64(file);
+    const res = await apiFetch(`${API_PRODUCTS}/upload`, {
+      method: "POST",
+      body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type || "application/octet-stream", upload_type: "file" }),
+    }, token);
+    setUploading(false);
+    if (res.error) { setError(res.error); return; }
+    setFileUrl(res.url || "");
+    setFileName(file.name);
+    setFileFormat(res.format || file.name.split(".").pop() || "");
   };
 
   const handlePreviewSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploadingPreview(true);
-    setError("");
-    try {
-      const b64 = await readAsBase64(file);
-      const res = await apiFetch(`${API_PRODUCTS}/upload`, {
-        method: "POST",
-        body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type, upload_type: "preview" }),
-      }, token);
-      if (res.error) { setError(res.error); return; }
-      setPreviewUrl(res.url || "");
-      setPreviewThumb(res.url || "");
-    } catch {
-      setError("Ошибка загрузки превью");
-    } finally {
-      setUploadingPreview(false);
-    }
+    setUploadingPreview(true); setError("");
+    const b64 = await readAsBase64(file);
+    const res = await apiFetch(`${API_PRODUCTS}/upload`, {
+      method: "POST",
+      body: JSON.stringify({ file_data: b64, file_name: file.name, content_type: file.type, upload_type: "preview" }),
+    }, token);
+    setUploadingPreview(false);
+    if (res.error) { setError(res.error); return; }
+    setPreviewUrl(res.url || "");
+    setPreviewThumb(res.url || "");
   };
 
   const handleSubmit = async () => {
-    if (!title.trim() || !category || !price || parseInt(price) <= 0) { setError("Заполни все обязательные поля"); return; }
-    if (!fileUrl) { setError("Загрузи файл"); return; }
-    setSubmitting(true);
-    setError("");
-    try {
-      const res = await apiFetch(`${API_PRODUCTS}/`, {
-        method: "POST",
-        body: JSON.stringify({ title, description, category, price: parseInt(price), file_url: fileUrl, preview_url: previewUrl, file_name: fileName, file_format: fileFormat }),
-      }, token);
-      if (res.error) { setError(res.error); return; }
-      onSuccess();
-    } catch {
-      setError("Ошибка создания продукта");
-    } finally {
-      setSubmitting(false);
-    }
+    if (!title.trim() || !price || parseInt(price) <= 0) { setError("Заполни название и цену"); return; }
+    const finalFileUrl = (contentType === "link" || contentType === "bot") ? linkUrl : fileUrl;
+    if (!finalFileUrl) { setError(contentType === "link" || contentType === "bot" ? "Укажи ссылку" : "Загрузи файл"); return; }
+    setSubmitting(true); setError("");
+    const res = await apiFetch(`${API_PRODUCTS}/`, {
+      method: "POST",
+      body: JSON.stringify({ title, description, category, price: parseInt(price), file_url: finalFileUrl, preview_url: previewUrl, file_name: fileName || title, file_format: contentType === "link" ? "link" : contentType === "bot" ? "bot" : fileFormat }),
+    }, token);
+    setSubmitting(false);
+    if (res.error) { setError(res.error); return; }
+    onSuccess();
   };
+
+  const ct = CONTENT_TYPES.find(c => c.id === contentType)!;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10 animate-fade-in">
-      <h1 className="font-orbitron font-bold text-2xl mb-8" style={{ color: "#e8f4ff" }}>Загрузить продукт</h1>
+      <h1 className="font-orbitron font-bold text-2xl mb-2" style={{ color: "#e8f4ff" }}>Загрузить продукт</h1>
+      <p className="text-sm mb-8" style={{ color: "rgba(180,200,220,0.45)" }}>Продавай файлы, фото, ссылки, доступы к ботам и сервисам</p>
+
       <div className="space-y-5">
+        {/* Content type selector */}
+        <div>
+          <label className="text-xs font-orbitron tracking-widest mb-2 block" style={{ color: "#00f5d4" }}>ТИП КОНТЕНТА *</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {CONTENT_TYPES.map((ct) => (
+              <button key={ct.id} type="button" onClick={() => { setContentType(ct.id); setFileUrl(""); setLinkUrl(""); setFileName(""); setFileFormat(""); }}
+                className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl transition-all"
+                style={{ background: contentType === ct.id ? "rgba(0,245,212,0.1)" : "rgba(13,20,32,0.7)", border: `1px solid ${contentType === ct.id ? "rgba(0,245,212,0.4)" : "rgba(0,245,212,0.08)"}`, color: contentType === ct.id ? "#00f5d4" : "rgba(180,200,220,0.45)" }}>
+                <Icon name={ct.icon} size={20} />
+                <span className="text-xs font-orbitron">{ct.label}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs mt-1.5" style={{ color: "rgba(180,200,220,0.3)" }}>{ct.hint}</p>
+        </div>
+
         {/* Title */}
         <div>
           <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>НАЗВАНИЕ *</label>
@@ -772,6 +786,7 @@ function UploadPage({ user, token, onAuthRequired, onSuccess }: {
             className="w-full px-4 py-3 rounded-xl outline-none text-sm"
             style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
         </div>
+
         {/* Category + Price */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -789,46 +804,71 @@ function UploadPage({ user, token, onAuthRequired, onSuccess }: {
               style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
           </div>
         </div>
+
         {/* Description */}
         <div>
           <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ОПИСАНИЕ</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опиши свой продукт..." rows={4}
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Опиши свой продукт — что получит покупатель..." rows={4}
             className="w-full px-4 py-3 rounded-xl outline-none resize-none text-sm"
             style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
         </div>
-        {/* File upload */}
-        <div>
-          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ФАЙЛ ПРОДУКТА *</label>
-          <input ref={fileRef} type="file" className="hidden"
-            accept=".pdf,.pptx,.docx,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.zip"
-            onChange={handleFileSelect} />
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="w-full rounded-xl py-8 flex flex-col items-center justify-center gap-3 transition-all"
-            style={{ border: `2px dashed ${fileUrl ? "rgba(0,245,212,0.4)" : "rgba(0,245,212,0.15)"}`, background: fileUrl ? "rgba(0,245,212,0.04)" : "rgba(13,20,32,0.5)", color: "#e8f4ff" }}>
-            {uploading ? (
-              <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,245,212,0.3)", borderTopColor: "#00f5d4" }} />
-            ) : fileUrl ? (
-              <>
-                <Icon name="CheckCircle" size={28} style={{ color: "#00f5d4" }} />
-                <div className="text-center">
-                  <p className="text-sm font-semibold neon-text">{fileName}</p>
-                  <p className="text-xs uppercase font-orbitron mt-0.5" style={{ color: "rgba(0,245,212,0.5)" }}>{fileFormat}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <Icon name="Upload" size={28} style={{ color: "rgba(0,245,212,0.3)" }} />
-                <div className="text-center">
-                  <p className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>Нажми для выбора файла</p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.3)" }}>PDF, PPTX, DOCX, XLSX, ZIP, изображения · до 100 МБ</p>
-                </div>
-              </>
-            )}
-          </button>
-        </div>
+
+        {/* File OR Link upload */}
+        {(contentType === "link" || contentType === "bot") ? (
+          <div>
+            <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>
+              {contentType === "bot" ? "ССЫЛКА / КЛЮЧ ДОСТУПА *" : "ССЫЛКА *"}
+            </label>
+            <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder={contentType === "bot" ? "https://t.me/YourBot или API-ключ" : "https://drive.google.com/... или https://..."}
+              className="w-full px-4 py-3 rounded-xl outline-none text-sm"
+              style={{ background: "rgba(13,20,32,0.9)", border: "1px solid rgba(0,245,212,0.18)", color: "#e8f4ff", fontFamily: "'Golos Text',sans-serif" }} />
+            <p className="text-xs mt-1.5" style={{ color: "rgba(180,200,220,0.3)" }}>
+              {contentType === "bot" ? "Покупатель увидит эту ссылку/ключ после оплаты" : "Покупатель получит доступ по этой ссылке после оплаты"}
+            </p>
+          </div>
+        ) : (
+          <div>
+            <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#00f5d4" }}>ФАЙЛ *</label>
+            <input ref={fileRef} type="file" className="hidden"
+              accept="*/*"
+              onChange={handleFileSelect} />
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="w-full rounded-xl py-8 flex flex-col items-center justify-center gap-3 transition-all"
+              style={{ border: `2px dashed ${fileUrl ? "rgba(0,245,212,0.4)" : "rgba(0,245,212,0.15)"}`, background: fileUrl ? "rgba(0,245,212,0.04)" : "rgba(13,20,32,0.5)", color: "#e8f4ff" }}>
+              {uploading ? (
+                <div className="w-7 h-7 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(0,245,212,0.3)", borderTopColor: "#00f5d4" }} />
+              ) : fileUrl ? (
+                <>
+                  <Icon name="CheckCircle" size={28} style={{ color: "#00f5d4" }} />
+                  <div className="text-center">
+                    <p className="text-sm font-semibold neon-text">{fileName}</p>
+                    <p className="text-xs uppercase font-orbitron mt-0.5" style={{ color: "rgba(0,245,212,0.5)" }}>{fileFormat}</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.3)" }}>Нажми чтобы заменить</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Icon name="Upload" size={28} style={{ color: "rgba(0,245,212,0.3)" }} />
+                  <div className="text-center">
+                    <p className="text-sm" style={{ color: "rgba(180,200,220,0.5)" }}>Нажми для выбора файла</p>
+                    <p className="text-xs mt-0.5" style={{ color: "rgba(180,200,220,0.3)" }}>
+                      {contentType === "image"
+                        ? "JPG, PNG, GIF, WEBP, SVG, PSD, AI и другие · до 100 МБ"
+                        : "PDF, DOCX, PPTX, XLSX, ZIP, RAR, MP4, MP3, любой формат · до 100 МБ"}
+                    </p>
+                  </div>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* Preview upload */}
         <div>
-          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#9b59f5" }}>ПРЕВЬЮ-ИЗОБРАЖЕНИЕ <span style={{ color: "rgba(180,200,220,0.35)", fontSize: 9 }}>НЕОБЯЗАТЕЛЬНО</span></label>
+          <label className="text-xs font-orbitron tracking-widest mb-1.5 block" style={{ color: "#9b59f5" }}>
+            ПРЕВЬЮ-ИЗОБРАЖЕНИЕ <span style={{ color: "rgba(180,200,220,0.35)", fontSize: 9 }}>НЕОБЯЗАТЕЛЬНО</span>
+          </label>
           <input ref={previewRef} type="file" accept="image/*" className="hidden" onChange={handlePreviewSelect} />
           <button type="button" onClick={() => previewRef.current?.click()}
             className="w-full rounded-xl py-5 flex flex-col items-center justify-center gap-2 transition-all"
@@ -846,12 +886,13 @@ function UploadPage({ user, token, onAuthRequired, onSuccess }: {
             ) : (
               <>
                 <Icon name="Image" size={22} style={{ color: "rgba(155,89,245,0.35)" }} />
-                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Загрузить изображение</p>
+                <p className="text-xs" style={{ color: "rgba(180,200,220,0.4)" }}>Загрузить изображение-обложку</p>
               </>
             )}
           </button>
           <p className="text-xs mt-1.5" style={{ color: "rgba(180,200,220,0.3)" }}>Необязательно — без превью используется первая страница файла</p>
         </div>
+
         {error && <p className="text-sm px-3 py-2 rounded-lg" style={{ color: "#f55050", background: "rgba(245,80,80,0.08)", border: "1px solid rgba(245,80,80,0.15)" }}>{error}</p>}
         <button onClick={handleSubmit} disabled={submitting || uploading}
           className="w-full neon-btn-solid py-3.5 rounded-xl font-orbitron font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed">

@@ -152,8 +152,8 @@ export function WithdrawModal({ user, token, onClose, onSuccess }: { user: User;
 export function AuthModal({ mode, onClose, onLogin, onRegister, onSwitch }: {
   mode: "login" | "register";
   onClose: () => void;
-  onLogin: (email: string, password: string) => void;
-  onRegister: (name: string, email: string, password: string) => void;
+  onLogin: (email: string, password: string) => Promise<void>;
+  onRegister: (name: string, email: string, password: string) => Promise<void>;
   onSwitch: (m: "login" | "register") => void;
 }) {
   const [name, setName] = useState("");
@@ -164,13 +164,20 @@ export function AuthModal({ mode, onClose, onLogin, onRegister, onSwitch }: {
 
   const submit = async () => {
     setError("");
+    if (!email.trim() || !password.trim()) { setError("Заполни все поля"); return; }
+    if (mode === "register" && !name.trim()) { setError("Введи имя"); return; }
     setLoading(true);
-    if (mode === "login") {
-      await onLogin(email, password);
-    } else {
-      await onRegister(name, email, password);
+    try {
+      if (mode === "login") {
+        await onLogin(email, password);
+      } else {
+        await onRegister(name, email, password);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Произошла ошибка");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

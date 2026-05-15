@@ -10,8 +10,12 @@ export async function apiFetch(url: string, opts: RequestInit = {}, token?: stri
     ...((opts.headers as Record<string, string>) || {}),
   };
   if (token) h["X-Auth-Token"] = token;
-  const r = await fetch(url, { ...opts, headers: h });
-  return r.json();
+  try {
+    const r = await fetch(url, { ...opts, headers: h });
+    return r.json();
+  } catch {
+    return { error: "Ошибка соединения с сервером" };
+  }
 }
 
 export type Product = {
